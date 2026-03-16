@@ -219,10 +219,6 @@ Tasks:
 - Fix gameplay bugs 
 - Document testing results
 
-
-Implement game over logic
-------------------------------------------------------------------------
-
 ## Project Structure
 
     MindRushAI/
