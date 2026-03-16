@@ -109,6 +109,7 @@ Core Gameplay
 ## Backlog
 
 ***EPIC 1 – Core Game Logic***
+
 -Implement main game screen
 
 -Implement sequence display mechanism
