@@ -112,10 +112,12 @@ Core Gameplay
 
 Implement the main gameplay mechanics of the memory challenge.
 
-Tasks: - Implement game state management (START, PLAYING, GAME_OVER) -
-Implement round progression system - Implement sequence storage
-structure - Implement player input validation - Implement game over
-logic
+Tasks:
+- Implement game state management (START, PLAYING, GAME_OVER)
+- Implement round progression system 
+- Implement sequence storage structure 
+- Implement player input validation 
+- Implement game over logic
 
 ------------------------------------------------------------------------
 
@@ -123,9 +125,11 @@ logic
 
 Responsible for generating the sequences that the player must memorize.
 
-Tasks: - Implement sequence generation algorithm - Create
-SequenceGeneratorAI module - Generate sequences based on difficulty
-level - Ensure sequences increase progressively
+Tasks: 
+- Implement sequence generation algorithm 
+- Create SequenceGeneratorAI module 
+- Generate sequences based on difficulty level 
+- Ensure sequences increase progressively
 
 ------------------------------------------------------------------------
 
@@ -133,9 +137,12 @@ level - Ensure sequences increase progressively
 
 Introduce AI-based difficulty adjustment.
 
-Tasks: - Implement DifficultyAdjusterAI module - Track player success
-rate - Track player response time - Adjust sequence length dynamically -
-Adjust difficulty based on performance
+Tasks: 
+- Implement DifficultyAdjusterAI module 
+- Track player success rate 
+- Track player response time 
+- Adjust sequence length dynamically 
+- Adjust difficulty based on performance
 
 ------------------------------------------------------------------------
 
@@ -143,9 +150,12 @@ Adjust difficulty based on performance
 
 Develop the graphical interface of the game.
 
-Tasks: - Create Start Screen - Create Game Screen - Create Game Over
-Screen - Implement interactive buttons for player input - Implement
-visual feedback for correct/incorrect input
+Tasks:
+- Create Start Screen 
+- Create Game Screen 
+- Create Game Over Screen 
+- Implement interactive buttons for player input 
+- Implement visual feedback for correct/incorrect input
 
 ------------------------------------------------------------------------
 
@@ -153,9 +163,11 @@ visual feedback for correct/incorrect input
 
 Track player performance and progression.
 
-Tasks: - Implement score calculation system - Display current score
-during gameplay - Save best score locally - Load best score when the
-application starts
+Tasks:
+- Implement score calculation system 
+- Display current score during gameplay 
+- Save best score locally 
+- Load best score when the application starts
 
 ------------------------------------------------------------------------
 
@@ -163,9 +175,11 @@ application starts
 
 Improve user experience with visual effects.
 
-Tasks: - Implement sequence highlight animation - Add visual feedback
-for player input - Add transition between screens - Add simple UI
-animations
+Tasks: 
+- Implement sequence highlight animation 
+- Add visual feedback for player input 
+- Add transition between screens 
+- Add simple UI animations
 
 ------------------------------------------------------------------------
 
@@ -173,9 +187,12 @@ animations
 
 Add sound effects to enhance gameplay.
 
-Tasks: - Implement sound manager - Add sound effect for button press -
-Add sound effect for correct sequence - Add sound effect for incorrect
-input - Add background music (optional)
+Tasks:
+- Implement sound manager 
+- Add sound effect for button press 
+- Add sound effect for correct sequence 
+- Add sound effect for incorrect input 
+- Add background music (optional)
 
 ------------------------------------------------------------------------
 
@@ -183,8 +200,11 @@ input - Add background music (optional)
 
 Store player data locally.
 
-Tasks: - Implement local storage system - Save best score - Save
-gameplay statistics - Load stored data when the game starts
+Tasks:
+- Implement local storage system 
+- Save best score 
+- Save gameplay statistics 
+- Load stored data when the game starts
 
 ------------------------------------------------------------------------
 
@@ -192,9 +212,12 @@ gameplay statistics - Load stored data when the game starts
 
 Ensure reliability and correctness of the application.
 
-Tasks: - Write unit tests for game logic - Write unit tests for AI
-modules - Perform manual gameplay testing - Fix gameplay bugs - Document
-testing results
+Tasks:
+- Write unit tests for game logic 
+- Write unit tests for AI modules 
+- Perform manual gameplay testing 
+- Fix gameplay bugs 
+- Document testing results
 
 
 Implement game over logic
