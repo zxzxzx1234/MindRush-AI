@@ -108,56 +108,94 @@ Core Gameplay
 
 ## Backlog
 
-***EPIC 1 – Core Game Logic***
+## EPIC 1 -- Core Game Logic
 
--Implement main game screen
+Implement the main gameplay mechanics of the memory challenge.
 
--Implement sequence display mechanism
+Tasks: - Implement game state management (START, PLAYING, GAME_OVER) -
+Implement round progression system - Implement sequence storage
+structure - Implement player input validation - Implement game over
+logic
 
--Implement user input validation
+------------------------------------------------------------------------
 
--Implement score system
+## EPIC 2 -- Sequence Generation
 
-***EPIC 2 – AI Integration***
+Responsible for generating the sequences that the player must memorize.
 
--Implement SequenceGeneratorAI module
+Tasks: - Implement sequence generation algorithm - Create
+SequenceGeneratorAI module - Generate sequences based on difficulty
+level - Ensure sequences increase progressively
 
--Implement DifficultyAdjusterAI module
+------------------------------------------------------------------------
 
--Define AI-agent communication interface
+## EPIC 3 -- Adaptive Difficulty System
 
--Log player performance metrics
+Introduce AI-based difficulty adjustment.
 
--Adjust sequence length dynamically
+Tasks: - Implement DifficultyAdjusterAI module - Track player success
+rate - Track player response time - Adjust sequence length dynamically -
+Adjust difficulty based on performance
 
-***EPIC 3 – UI & UX***
+------------------------------------------------------------------------
 
--Create start screen
+## EPIC 4 -- User Interface
 
--Create game screen layout
+Develop the graphical interface of the game.
 
--Create game over screen
+Tasks: - Create Start Screen - Create Game Screen - Create Game Over
+Screen - Implement interactive buttons for player input - Implement
+visual feedback for correct/incorrect input
 
--Add animations for sequence display
+------------------------------------------------------------------------
 
--Add visual feedback for correct/incorrect input
+## EPIC 5 -- Score and Progress Tracking
 
+Track player performance and progression.
 
-***EPIC 4 – Persistence***
+Tasks: - Implement score calculation system - Display current score
+during gameplay - Save best score locally - Load best score when the
+application starts
 
--Implement local storage for best score
+------------------------------------------------------------------------
 
--Store gameplay statistics
+## EPIC 6 -- Animations and Visual Feedback
 
-***EPIC 5 – Testing & Quality***
+Improve user experience with visual effects.
 
--Unit tests for game logic
+Tasks: - Implement sequence highlight animation - Add visual feedback
+for player input - Add transition between screens - Add simple UI
+animations
 
--Unit tests for AI modules
+------------------------------------------------------------------------
 
--Manual UI testing
+## EPIC 7 -- Audio System
 
--Bug reporting workflow
+Add sound effects to enhance gameplay.
+
+Tasks: - Implement sound manager - Add sound effect for button press -
+Add sound effect for correct sequence - Add sound effect for incorrect
+input - Add background music (optional)
+
+------------------------------------------------------------------------
+
+## EPIC 8 -- Data Persistence
+
+Store player data locally.
+
+Tasks: - Implement local storage system - Save best score - Save
+gameplay statistics - Load stored data when the game starts
+
+------------------------------------------------------------------------
+
+## EPIC 9 -- Testing and Quality Assurance
+
+Ensure reliability and correctness of the application.
+
+Tasks: - Write unit tests for game logic - Write unit tests for AI
+modules - Perform manual gameplay testing - Fix gameplay bugs - Document
+testing results
+
 
 Implement game over logic
 ------------------------------------------------------------------------
