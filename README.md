@@ -1,2 +1,0 @@
-# MindRush-AI
-MDS Project
