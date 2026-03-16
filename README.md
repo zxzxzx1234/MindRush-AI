@@ -108,7 +108,7 @@ Core Gameplay
 
 ## Backlog
 
-*EPIC 1 – Core Game Logic*
+***EPIC 1 – Core Game Logic***
 -Implement main game screen
 
 -Implement sequence display mechanism
@@ -117,7 +117,7 @@ Core Gameplay
 
 -Implement score system
 
-*EPIC 2 – AI Integration*
+***EPIC 2 – AI Integration***
 
 -Implement SequenceGeneratorAI module
 
@@ -129,7 +129,7 @@ Core Gameplay
 
 -Adjust sequence length dynamically
 
-*EPIC 3 – UI & UX*
+***EPIC 3 – UI & UX***
 
 -Create start screen
 
@@ -142,13 +142,13 @@ Core Gameplay
 -Add visual feedback for correct/incorrect input
 
 
-*EPIC 4 – Persistence*
+***EPIC 4 – Persistence***
 
 -Implement local storage for best score
 
 -Store gameplay statistics
 
-*EPIC 5 – Testing & Quality*
+***EPIC 5 – Testing & Quality***
 
 -Unit tests for game logic
 
