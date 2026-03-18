@@ -66,19 +66,6 @@ game mechanics.
 
 ------------------------------------------------------------------------
 
-## Planned Features
-
-The planned features of the application include:
-
--   interactive memory gameplay
--   dynamic difficulty adjustment
--   score tracking system
--   best score persistence
--   simple and intuitive user interface
--   AI-assisted gameplay balancing
-
-------------------------------------------------------------------------
-
 ## User Stories
 Core Gameplay
 
@@ -106,118 +93,145 @@ Core Gameplay
 
 ------------------------------------------------------------------------
 
-## Backlog
+# Backlog
+
+------------------------------------------------------------------------
 
 ## EPIC 1 -- Core Game Logic
 
-Implement the main gameplay mechanics of the memory challenge.
+**Implement the main gameplay mechanics of the memory challenge.**
 
-Tasks:
-- Implement game state management (START, PLAYING, GAME_OVER)
-- Implement round progression system 
-- Implement sequence storage structure 
-- Implement player input validation 
-- Implement game over logic
+### Tasks:
 
-------------------------------------------------------------------------
-
-## EPIC 2 -- Sequence Generation
-
-Responsible for generating the sequences that the player must memorize.
-
-Tasks: 
-- Implement sequence generation algorithm 
-- Create SequenceGeneratorAI module 
-- Generate sequences based on difficulty level 
-- Ensure sequences increase progressively
+-   Implement game state management (START, PLAYING, GAME_OVER)
+-   Implement round progression system
+-   Implement sequence storage structure
+-   Implement player input validation
+-   Implement game over logic
+-   Implement restart game functionality
 
 ------------------------------------------------------------------------
 
-## EPIC 3 -- Adaptive Difficulty System
+## EPIC 2 –- AI Foundations
 
-Introduce AI-based difficulty adjustment.
+### Tasks:
 
-Tasks: 
-- Implement DifficultyAdjusterAI module 
-- Track player success rate 
-- Track player response time 
-- Adjust sequence length dynamically 
-- Adjust difficulty based on performance
+-   Define AI decision rules
+-   Implement pattern logic
+-   Support AI agent behavior
+------------------------------------------------------------------------
+
+## EPIC 3 -- AI Agent: SequenceGeneratorAI
+
+**Develop an AI agent responsible for generating intelligent
+sequences.**
+
+### Tasks:
+
+-   Design agent architecture
+-   Generate sequences using rule-based AI logic
+-   Implement configurable generation rules
+-   Ensure increasing complexity using AI reasoning
+-   Validate generated sequences
 
 ------------------------------------------------------------------------
 
-## EPIC 4 -- User Interface
+## EPIC 4 -- AI Agent: DifficultyAdjusterAI
 
-Develop the graphical interface of the game.
+**Develop an AI agent that dynamically adjusts difficulty.**
 
-Tasks:
-- Create Start Screen 
-- Create Game Screen 
-- Create Game Over Screen 
-- Implement interactive buttons for player input 
-- Implement visual feedback for correct/incorrect input
+### Tasks:
 
-------------------------------------------------------------------------
-
-## EPIC 5 -- Score and Progress Tracking
-
-Track player performance and progression.
-
-Tasks:
-- Implement score calculation system 
-- Display current score during gameplay 
-- Save best score locally 
-- Load best score when the application starts
+-   Collect gameplay metrics (success rate, time, mistakes)
+-   Analyze player metrics locally
+-   Implement heuristic-based difficulty adjustment
+-   Adapt sequence length and complexity dynamically
+-   Continuously refine AI decision rules
 
 ------------------------------------------------------------------------
 
-## EPIC 6 -- Animations and Visual Feedback
+## EPIC 5 -- AI Agent Communication & Orchestration
 
-Improve user experience with visual effects.
+**Manage interaction between AI agents and the game system.**
 
-Tasks: 
-- Implement sequence highlight animation 
-- Add visual feedback for player input 
-- Add transition between screens 
-- Add simple UI animations
+### Tasks:
 
-------------------------------------------------------------------------
-
-## EPIC 7 -- Audio System
-
-Add sound effects to enhance gameplay.
-
-Tasks:
-- Implement sound manager 
-- Add sound effect for button press 
-- Add sound effect for correct sequence 
-- Add sound effect for incorrect input 
-- Add background music (optional)
+-   Define communication flow between GameManager and AI agents
+-   Implement agent orchestration logic
+-   Handle AI decision timing within game loop
+-   Ensure consistency between agents
+-   Log AI decisions for debugging
+-   Ensure modular architecture for replacing AI agents
 
 ------------------------------------------------------------------------
 
-## EPIC 8 -- Data Persistence
+## EPIC 6 -- User Interface
 
-Store player data locally.
+**Develop the graphical interface of the game.**
 
-Tasks:
-- Implement local storage system 
-- Save best score 
-- Save gameplay statistics 
-- Load stored data when the game starts
+### Tasks:
+
+-   Create Start Screen
+-   Create Game Screen
+-   Create Game Over Screen
+-   Implement interactive buttons
+-   Display AI-driven sequence clearly
+-   Display current score during gameplay
+-   Show visual feedback for correct/incorrect input
 
 ------------------------------------------------------------------------
 
-## EPIC 9 -- Testing and Quality Assurance
+## EPIC 7 -- AI Feedback & Explainability
 
-Ensure reliability and correctness of the application.
+**Provide transparency for AI decisions.**
 
-Tasks:
-- Write unit tests for game logic 
-- Write unit tests for AI modules 
-- Perform manual gameplay testing 
-- Fix gameplay bugs 
-- Document testing results
+### Tasks:
+
+-   Display difficulty level changes to the player
+-   Show simple explanations for difficulty adjustments
+-   Log AI reasoning (optional debug mode)
+-   Improve user trust in AI behavior
+
+------------------------------------------------------------------------
+
+## EPIC 8 -- Data Persistence & Analytics
+
+**Store and analyze gameplay data.**
+
+### Tasks:
+
+-   Store gameplay metrics locally
+-   Save AI decisions history
+-   Save best score
+-   Load stored data at app start
+-   Prepare data for AI analysis
+
+------------------------------------------------------------------------
+
+## EPIC 9 -- Testing & AI Evaluation
+
+**Ensure reliability of both game logic and AI components.**
+
+### Tasks:
+
+-   Unit tests for game logic
+-   Unit tests for AI modules
+-   Simulate different player behaviors
+-   Evaluate AI performance and adjust decision rules
+
+------------------------------------------------------------------------
+
+## EPIC 10 -- Performance & Optimization
+
+**Optimize AI and application performance.**
+
+### Tasks:
+
+-   Optimize AI decision performance
+-   Optimize reuse of computed sequences when appropriate
+-   Ensure smooth animations and input handling
+-   Ensure smooth gameplay experience
+-   Handle offline fallback (basic random mode)
 
 ## Project Structure
 
