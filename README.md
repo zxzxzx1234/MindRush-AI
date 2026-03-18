@@ -114,6 +114,8 @@ Core Gameplay
 
 ## EPIC 2 –- AI Foundations
 
+**Define the foundations for the AI Agents.**
+
 ### Tasks:
 
 -   Define AI decision rules
