@@ -16,7 +16,9 @@ class AIManager(
         }
 
         return try {
+
             val response = runBlocking {
+
                 val prompt = """
 Generate a sequence for a memory game.
 
@@ -25,18 +27,22 @@ Rules:
 - Difficulty: $difficulty
 - Values must be integers between 0 and 3
 - Avoid repeating the same number too often
-- Make it slightly challenging but fair
+- Make it challenging but fair
 
-Return ONLY a list like: 0,1,2,3
+Return ONLY numbers like: 0,1,2,3
                 """.trimIndent()
 
                 llmClient.generate(prompt)
             }
 
             val parsed = parseSequence(response, length)
-            generator.refineSequence(parsed)
+
+            // ✅ FIX AICI
+            generator.refineSequence(parsed, difficulty)
 
         } catch (e: Exception) {
+
+            // fallback safe
             generator.generateSequence(length, difficulty)
         }
     }
@@ -58,11 +64,12 @@ Return ONLY a list like: 0,1,2,3
 
         return if (llmClient != null) {
             runBlocking {
+
                 val prompt = """
 Player success rate: $successRate
 New difficulty: $difficulty
 
-Explain briefly in 1 short sentence.
+Explain briefly in ONE short sentence.
                 """.trimIndent()
 
                 llmClient.generate(prompt)
@@ -79,7 +86,7 @@ Explain briefly in 1 short sentence.
     ): Int {
 
         return when {
-            successRate > 0.8 && avgTime < 1500 -> difficulty + 1
+            successRate > 0.85 && avgTime < 1200 -> difficulty + 1
             successRate < 0.4 -> difficulty - 1
             else -> difficulty
         }.coerceIn(1, 10)
@@ -92,6 +99,7 @@ Explain briefly in 1 short sentence.
     ): Int = runBlocking {
 
         try {
+
             val prompt = """
 You control game difficulty.
 
@@ -104,15 +112,21 @@ Return ONLY a number between 1 and 10.
 
             val response = llmClient!!.generate(prompt)
 
-            response.trim().toIntOrNull()?.coerceIn(1, 10)
+            response.trim()
+                .toIntOrNull()
+                ?.coerceIn(1, 10)
                 ?: heuristicAdjustment(difficulty, successRate, avgTime)
 
         } catch (e: Exception) {
+
             heuristicAdjustment(difficulty, successRate, avgTime)
         }
     }
 
-    private fun parseSequence(response: String, expectedLength: Int): List<Int> {
+    private fun parseSequence(
+        response: String,
+        expectedLength: Int
+    ): List<Int> {
 
         val numbers = response
             .replace("[", "")

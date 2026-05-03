@@ -11,8 +11,10 @@ class GameManager {
 
     enum class GameState {
         START,
+        PREPARING_ROUND,
         SHOWING_SEQUENCE,
         WAITING_INPUT,
+        ROUND_COMPLETE,
         GAME_OVER
     }
 
@@ -20,9 +22,13 @@ class GameManager {
         private set
 
     private val _currentSequence = mutableListOf<Int>()
-    val currentSequence: List<Int> get() = _currentSequence
+    val currentSequence: List<Int>
+        get() = _currentSequence
 
     var score = 0
+        private set
+
+    var roundsCompleted = 0
         private set
 
     private var currentDifficulty = 1
@@ -35,17 +41,34 @@ class GameManager {
     private val successHistory = mutableListOf<Boolean>()
     private val responseTimes = mutableListOf<Long>()
 
+    private val maxHistorySize = 8
+
     fun startGame() {
-        difficultyAI.reset()
-        score = 0
-        currentDifficulty = 1
-        successHistory.clear()
-        responseTimes.clear()
+        resetSessionStats()
         startNewRound()
     }
 
+    private fun resetSessionStats() {
+        difficultyAI.reset()
+
+        score = 0
+        roundsCompleted = 0
+        currentDifficulty = 1
+        currentInputIndex = 0
+
+        successHistory.clear()
+        responseTimes.clear()
+
+        _currentSequence.clear()
+
+        gameState = GameState.START
+    }
+
     private fun startNewRound() {
+        gameState = GameState.PREPARING_ROUND
+
         generateSequence()
+
         currentInputIndex = 0
         gameState = GameState.SHOWING_SEQUENCE
     }
@@ -53,36 +76,62 @@ class GameManager {
     private fun generateSequence() {
         val length = currentDifficulty
 
-        val newSequence = try {
-            aiManager.generateSequence(length, currentDifficulty)
+        val generatedSequence = try {
+            aiManager.generateSequence(
+                length,
+                currentDifficulty
+            )
         } catch (e: Exception) {
-            List(length) { (0..3).random() }
+            fallbackSequence(length)
         }
 
         _currentSequence.clear()
-        _currentSequence.addAll(newSequence)
+        _currentSequence.addAll(generatedSequence)
+    }
+
+    private fun fallbackSequence(length: Int): List<Int> {
+        return List(length) { (0..3).random() }
     }
 
     fun startInputPhase() {
-        if (gameState == GameState.SHOWING_SEQUENCE) {
-            currentInputIndex = 0
-            gameState = GameState.WAITING_INPUT
-        }
+        if (gameState != GameState.SHOWING_SEQUENCE) return
+
+        currentInputIndex = 0
+        gameState = GameState.WAITING_INPUT
     }
 
-    fun addPlayerInput(value: Int, responseTime: Long): Boolean {
-        if (gameState != GameState.WAITING_INPUT) return false
+    fun addPlayerInput(
+        value: Int,
+        responseTime: Long
+    ): Boolean {
 
-        if (value != _currentSequence[currentInputIndex]) {
-            registerResult(false, responseTime)
+        if (gameState != GameState.WAITING_INPUT) {
+            return false
+        }
+
+        if (_currentSequence.isEmpty()) {
             gameState = GameState.GAME_OVER
+            return false
+        }
+
+        if (currentInputIndex >= _currentSequence.size) {
+            gameState = GameState.GAME_OVER
+            return false
+        }
+
+        val expectedValue =
+            _currentSequence[currentInputIndex]
+
+        if (value != expectedValue) {
+            onRoundFailure(responseTime)
             return false
         }
 
         currentInputIndex++
 
+        registerInputTime(responseTime)
+
         if (currentInputIndex >= _currentSequence.size) {
-            registerResult(true, responseTime)
             onRoundSuccess()
         }
 
@@ -90,43 +139,85 @@ class GameManager {
     }
 
     private fun onRoundSuccess() {
+        registerRoundResult(true)
+
         score++
+        roundsCompleted++
+
+        gameState = GameState.ROUND_COMPLETE
+
         updateDifficulty()
+
         startNewRound()
     }
 
-    private fun registerResult(success: Boolean, responseTime: Long) {
-        if (successHistory.size >= 5) {
+    private fun onRoundFailure(
+        responseTime: Long
+    ) {
+
+        registerInputTime(responseTime)
+        registerRoundResult(false)
+
+        updateDifficulty()
+
+        gameState = GameState.GAME_OVER
+    }
+
+    private fun registerRoundResult(
+        success: Boolean
+    ) {
+
+        if (successHistory.size >= maxHistorySize) {
             successHistory.removeAt(0)
-            responseTimes.removeAt(0)
         }
 
         successHistory.add(success)
+    }
+
+    private fun registerInputTime(
+        responseTime: Long
+    ) {
+
+        if (responseTimes.size >= maxHistorySize) {
+            responseTimes.removeAt(0)
+        }
+
         responseTimes.add(responseTime)
     }
 
     private fun updateDifficulty() {
-        if (successHistory.isEmpty()) return
 
-        val successRate = successHistory.count { it }.toFloat() / successHistory.size
-        val avgTime = responseTimes.average()
+        if (successHistory.isEmpty() ||
+            responseTimes.isEmpty()
+        ) {
+            return
+        }
+
+        val successRate =
+            successHistory.count { it }.toFloat() /
+                    successHistory.size
+
+        val averageTime =
+            responseTimes.average()
 
         currentDifficulty = try {
-            aiManager.adjustDifficulty(currentDifficulty, successRate, avgTime)
+            aiManager.adjustDifficulty(
+                currentDifficulty,
+                successRate,
+                averageTime
+            )
         } catch (e: Exception) {
-            difficultyAI.update(true, avgTime.toLong())
+
+            difficultyAI.update(
+                successHistory.last(),
+                averageTime.toLong()
+            )
+
             difficultyAI.difficulty
         }
     }
 
     fun resetGame() {
-        _currentSequence.clear()
-        score = 0
-        currentInputIndex = 0
-        currentDifficulty = 1
-        successHistory.clear()
-        responseTimes.clear()
-        difficultyAI.reset()
-        gameState = GameState.START
+        resetSessionStats()
     }
 }

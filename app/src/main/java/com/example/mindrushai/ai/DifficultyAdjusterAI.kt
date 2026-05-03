@@ -8,7 +8,7 @@ class DifficultyAdjusterAI {
     private val maxDifficulty = 10
     private val minDifficulty = 1
 
-    private val historySize = 6
+    private val historySize = 8
     private val successHistory = ArrayDeque<Boolean>()
     private val responseTimes = ArrayDeque<Long>()
 
@@ -28,37 +28,47 @@ class DifficultyAdjusterAI {
     }
 
     private fun adjustDifficulty() {
-        if (successHistory.isEmpty()) return
+        if (successHistory.size < 3) return
 
-        val successRate = successHistory.count { it }.toFloat() / successHistory.size
+        val successRate =
+            successHistory.count { it }.toFloat() / successHistory.size
+
         val avgTime = responseTimes.average()
 
-        val performanceScore = calculatePerformanceScore(successRate, avgTime)
+        val performanceScore =
+            calculatePerformanceScore(successRate, avgTime)
 
         when {
-            performanceScore > 0.75 -> increaseDifficulty(1)
-            performanceScore < 0.35 -> decreaseDifficulty(1)
+            performanceScore >= 0.82 -> increaseDifficulty(1)
+            performanceScore <= 0.35 -> decreaseDifficulty(1)
         }
     }
 
-    private fun calculatePerformanceScore(successRate: Float, avgTime: Double): Double {
-        val normalizedTime = when {
-            avgTime < 800 -> 1.0
-            avgTime < 1500 -> 0.8
-            avgTime < 2500 -> 0.6
-            avgTime < 3500 -> 0.4
-            else -> 0.2
+    private fun calculatePerformanceScore(
+        successRate: Float,
+        avgTime: Double
+    ): Double {
+
+        val timeScore = when {
+            avgTime < 700 -> 1.0
+            avgTime < 1200 -> 0.85
+            avgTime < 1800 -> 0.7
+            avgTime < 2500 -> 0.5
+            avgTime < 3500 -> 0.3
+            else -> 0.1
         }
 
-        return (successRate * 0.7) + (normalizedTime * 0.3)
+        return (successRate * 0.75) + (timeScore * 0.25)
     }
 
     private fun increaseDifficulty(amount: Int) {
-        difficulty = (difficulty + amount).coerceAtMost(maxDifficulty)
+        difficulty =
+            (difficulty + amount).coerceAtMost(maxDifficulty)
     }
 
     private fun decreaseDifficulty(amount: Int) {
-        difficulty = (difficulty - amount).coerceAtLeast(minDifficulty)
+        difficulty =
+            (difficulty - amount).coerceAtLeast(minDifficulty)
     }
 
     fun reset() {

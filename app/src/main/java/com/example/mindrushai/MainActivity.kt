@@ -3,9 +3,25 @@ package com.example.mindrushai
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -33,11 +49,13 @@ fun GameScreen(gameManager: GameManager) {
 
     var score by remember { mutableStateOf(0) }
     var highlightedIndex by remember { mutableStateOf<Int?>(null) }
+    var pressedIndex by remember { mutableStateOf<Int?>(null) }
     var inputEnabled by remember { mutableStateOf(false) }
     var inputStartTime by remember { mutableStateOf(0L) }
     var animationTrigger by remember { mutableStateOf(0) }
     var gameOver by remember { mutableStateOf(false) }
     var statusText by remember { mutableStateOf("Press Start") }
+    var combo by remember { mutableStateOf(0) }
 
     val colors = listOf(
         MaterialTheme.colorScheme.primary,
@@ -46,18 +64,35 @@ fun GameScreen(gameManager: GameManager) {
         MaterialTheme.colorScheme.error
     )
 
+    fun sequenceSpeed(): Long {
+        return when (gameManager.difficulty) {
+            in 1..2 -> 700L
+            in 3..4 -> 600L
+            in 5..6 -> 500L
+            in 7..8 -> 420L
+            else -> 350L
+        }
+    }
+
     LaunchedEffect(animationTrigger) {
 
-        if (gameManager.gameState != GameManager.GameState.SHOWING_SEQUENCE) return@LaunchedEffect
+        if (gameManager.gameState !=
+            GameManager.GameState.SHOWING_SEQUENCE
+        ) {
+            return@LaunchedEffect
+        }
 
         inputEnabled = false
-        statusText = "Get ready..."
+        highlightedIndex = null
 
-        delay(800)
+        statusText = "Get Ready..."
+        delay(900)
 
-        statusText = "Watch carefully"
+        statusText = "Watch Carefully"
+        delay(600)
 
-        delay(400)
+        val speed = sequenceSpeed()
+        val pause = speed / 3
 
         val sequence = gameManager.currentSequence
 
@@ -66,33 +101,32 @@ fun GameScreen(gameManager: GameManager) {
             val value = sequence[i]
 
             highlightedIndex = value
-            delay(650)
+            delay(speed)
 
             highlightedIndex = null
-            delay(250)
+            delay(pause)
 
             val nextSame =
-                i < sequence.lastIndex && sequence[i + 1] == value
+                i < sequence.lastIndex &&
+                        sequence[i + 1] == value
 
             if (nextSame) {
-                delay(450)
+                delay(250)
             }
         }
 
-        highlightedIndex = null
-
-        delay(600)
+        delay(500)
 
         gameManager.startInputPhase()
 
-        statusText = "Your turn"
+        statusText = "Your Turn"
         inputEnabled = true
         inputStartTime = System.currentTimeMillis()
     }
 
     suspend fun startNextRound() {
-        statusText = "Nice! Next round..."
         inputEnabled = false
+        statusText = "Great! Next Round..."
         delay(1200)
         animationTrigger++
     }
@@ -100,33 +134,47 @@ fun GameScreen(gameManager: GameManager) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp),
+            .padding(20.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
 
-        Text("MindRush AI", style = MaterialTheme.typography.headlineMedium)
+        Text(
+            text = "MindRush AI",
+            style = MaterialTheme.typography.headlineLarge
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text(
+            text = "Score: $score",
+            style = MaterialTheme.typography.titleLarge
+        )
+
+        Text(
+            text = "Difficulty: ${gameManager.difficulty}",
+            style = MaterialTheme.typography.titleMedium
+        )
+
+        Text(
+            text = "Combo: $combo",
+            style = MaterialTheme.typography.titleMedium
+        )
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        Text("Score: $score", style = MaterialTheme.typography.titleLarge)
+        Text(text = statusText)
 
-        Spacer(modifier = Modifier.height(8.dp))
-
-        Text("Difficulty: ${gameManager.difficulty}")
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        Text(statusText)
-
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(24.dp))
 
         Button(
             onClick = {
                 gameManager.startGame()
                 score = 0
+                combo = 0
                 gameOver = false
                 highlightedIndex = null
+                pressedIndex = null
                 statusText = "Starting..."
                 animationTrigger++
             }
@@ -134,7 +182,7 @@ fun GameScreen(gameManager: GameManager) {
             Text("Start Game")
         }
 
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.height(40.dp))
 
         Column {
             for (row in 0..1) {
@@ -142,45 +190,69 @@ fun GameScreen(gameManager: GameManager) {
                     for (col in 0..1) {
 
                         val index = row * 2 + col
-                        val isHighlighted = highlightedIndex == index
+
+                        val active =
+                            highlightedIndex == index ||
+                                    pressedIndex == index
 
                         Button(
                             onClick = {
 
-                                if (!inputEnabled || gameOver) return@Button
+                                if (!inputEnabled || gameOver) {
+                                    return@Button
+                                }
+
+                                pressedIndex = index
+
+                                scope.launch {
+                                    delay(120)
+                                    pressedIndex = null
+                                }
 
                                 val responseTime =
-                                    System.currentTimeMillis() - inputStartTime
+                                    System.currentTimeMillis() -
+                                            inputStartTime
 
                                 val result =
-                                    gameManager.addPlayerInput(index, responseTime)
+                                    gameManager.addPlayerInput(
+                                        index,
+                                        responseTime
+                                    )
 
                                 score = gameManager.score
-                                highlightedIndex = index
 
                                 if (!result) {
-                                    statusText = "Wrong!"
+                                    statusText = "Wrong Sequence!"
                                     gameOver = true
+                                    combo = 0
                                     inputEnabled = false
-                                } else if (gameManager.gameState == GameManager.GameState.SHOWING_SEQUENCE) {
+                                } else if (
+                                    gameManager.gameState ==
+                                    GameManager.GameState.SHOWING_SEQUENCE
+                                ) {
+                                    combo++
 
                                     scope.launch {
                                         startNextRound()
                                     }
                                 }
 
-                                inputStartTime = System.currentTimeMillis()
+                                inputStartTime =
+                                    System.currentTimeMillis()
                             },
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = if (isHighlighted) {
+                                containerColor = if (active) {
                                     colors[index]
                                 } else {
-                                    colors[index].copy(alpha = 0.4f)
+                                    colors[index].copy(alpha = 0.35f)
                                 }
                             ),
                             modifier = Modifier
                                 .padding(10.dp)
-                                .size(if (isHighlighted) 115.dp else 100.dp)
+                                .size(
+                                    if (active) 118.dp
+                                    else 100.dp
+                                )
                         ) {}
                     }
                 }
@@ -188,20 +260,33 @@ fun GameScreen(gameManager: GameManager) {
         }
 
         if (gameOver) {
-            Spacer(modifier = Modifier.height(24.dp))
 
-            Text("Game Over")
+            Spacer(modifier = Modifier.height(30.dp))
+
+            Text(
+                text = "Game Over",
+                style = MaterialTheme.typography.headlineSmall
+            )
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            Button(onClick = {
-                gameManager.resetGame()
-                score = 0
-                gameOver = false
-                inputEnabled = false
-                highlightedIndex = null
-                statusText = "Press Start"
-            }) {
+            Text(text = "Final Score: $score")
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Button(
+                onClick = {
+                    gameManager.resetGame()
+
+                    score = 0
+                    combo = 0
+                    gameOver = false
+                    inputEnabled = false
+                    highlightedIndex = null
+                    pressedIndex = null
+                    statusText = "Press Start"
+                }
+            ) {
                 Text("Restart")
             }
         }
