@@ -20,7 +20,9 @@ dynamically adjust gameplay difficulty based on player performance.
 
 ## AI Integration
 
-The application integrates two AI-based modules that enhance gameplay.
+The application integrates two AI-based modules that enhance gameplay,
+coordinated through an **AIManager** that supports multiple LLM backends
+(LM Studio, Ollama, OpenAI) with local heuristic fallbacks.
 
 ### SequenceGeneratorAI
 
@@ -31,12 +33,27 @@ challenge level.
 
 ### DifficultyAdjusterAI
 
-This module analyzes the player's performance using metrics such as: -
-success rate - response time - number of mistakes
+This module analyzes the player's performance using metrics such as:
+
+-   success rate
+-   response time
+-   number of mistakes
 
 Based on these metrics, the AI dynamically adjusts the difficulty by
 modifying the sequence length or complexity, ensuring that the game
 remains challenging but not frustrating.
+
+### LLM Integration
+
+The AI modules can optionally leverage Large Language Models through
+interchangeable clients:
+
+-   **LM Studio** -- local LLM inference
+-   **Ollama** -- local LLM inference
+-   **OpenAI** -- cloud-based LLM inference
+
+When no LLM is available, the system falls back to local rule-based
+heuristics.
 
 ------------------------------------------------------------------------
 
@@ -112,7 +129,7 @@ Core Gameplay
 
 ------------------------------------------------------------------------
 
-## EPIC 2 –- AI Foundations
+## EPIC 2 -- AI Foundations
 
 **Define the foundations for the AI Agents.**
 
@@ -240,14 +257,39 @@ sequences.**
     MindRushAI/
     │
     ├── app/
+    │   ├── src/
+    │   │   ├── main/
+    │   │   │   ├── java/com/example/mindrushai/
+    │   │   │   │   ├── ai/
+    │   │   │   │   │   ├── llm/
+    │   │   │   │   │   │   ├── LLMClient.kt
+    │   │   │   │   │   │   ├── LMStudioClient.kt
+    │   │   │   │   │   │   ├── OllamaClient.kt
+    │   │   │   │   │   │   └── OpenAIClient.kt
+    │   │   │   │   │   ├── AIManager.kt
+    │   │   │   │   │   ├── DifficultyAdjusterAI.kt
+    │   │   │   │   │   └── SequenceGeneratorAI.kt
+    │   │   │   │   ├── game/
+    │   │   │   │   │   └── GameManager.kt
+    │   │   │   │   ├── ui/theme/
+    │   │   │   │   │   ├── Color.kt
+    │   │   │   │   │   ├── Theme.kt
+    │   │   │   │   │   └── Type.kt
+    │   │   │   │   └── MainActivity.kt
+    │   │   │   ├── res/
+    │   │   │   └── AndroidManifest.xml
+    │   │   ├── test/                (unit tests)
+    │   │   └── androidTest/         (instrumented tests)
+    │   └── build.gradle.kts
+    │
     ├── docs/
     │   ├── user_stories.md
-    │   ├── backlog.md
-    │   ├── AI_usage_report.md
-    │   └── diagrams/
+    │   └── backlog.md
     │
-    ├── README.md
-    └── tests/
+    ├── gradle/
+    ├── build.gradle.kts
+    ├── settings.gradle.kts
+    └── README.md
 
 ------------------------------------------------------------------------
 
