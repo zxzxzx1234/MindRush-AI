@@ -1,7 +1,9 @@
 package com.example.mindrushai.ai
 
 import com.example.mindrushai.ai.llm.LLMClient
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 class AIManager(
     private val llmClient: LLMClient? = null
@@ -9,7 +11,7 @@ class AIManager(
 
     private val generator = SequenceGeneratorAI()
 
-    fun generateSequence(length: Int, difficulty: Int): List<Int> {
+    suspend fun generateSequence(length: Int, difficulty: Int): List<Int> {
 
         if (llmClient == null) {
             return generator.generateSequence(length, difficulty)
@@ -17,9 +19,7 @@ class AIManager(
 
         return try {
 
-            val response = runBlocking {
-
-                val prompt = """
+            val prompt = """
 Generate a sequence for a memory game.
 
 Rules:
@@ -30,24 +30,25 @@ Rules:
 - Make it challenging but fair
 
 Return ONLY numbers like: 0,1,2,3
-                """.trimIndent()
+            """.trimIndent()
 
-                llmClient.generate(prompt)
-            }
+            val response = withContext(Dispatchers.IO) {
+                withTimeoutOrNull(1500) {
+                    llmClient.generate(prompt)
+                }
+            } ?: return generator.generateSequence(length, difficulty)
 
             val parsed = parseSequence(response, length)
 
-            // ✅ FIX AICI
             generator.refineSequence(parsed, difficulty)
 
         } catch (e: Exception) {
 
-            // fallback safe
             generator.generateSequence(length, difficulty)
         }
     }
 
-    fun adjustDifficulty(
+    suspend fun adjustDifficulty(
         currentDifficulty: Int,
         successRate: Float,
         avgTime: Double
@@ -60,20 +61,26 @@ Return ONLY numbers like: 0,1,2,3
         }
     }
 
-    fun explainDecision(difficulty: Int, successRate: Float): String {
+    suspend fun explainDecision(
+        difficulty: Int,
+        successRate: Float
+    ): String {
 
         return if (llmClient != null) {
-            runBlocking {
 
-                val prompt = """
+            val prompt = """
 Player success rate: $successRate
 New difficulty: $difficulty
 
 Explain briefly in ONE short sentence.
-                """.trimIndent()
+            """.trimIndent()
 
-                llmClient.generate(prompt)
-            }
+            withContext(Dispatchers.IO) {
+                withTimeoutOrNull(1200) {
+                    llmClient.generate(prompt)
+                }
+            } ?: "Adjusted based on performance."
+
         } else {
             "Difficulty adjusted based on performance."
         }
@@ -92,13 +99,13 @@ Explain briefly in ONE short sentence.
         }.coerceIn(1, 10)
     }
 
-    private fun tryLLMAdjustment(
+    private suspend fun tryLLMAdjustment(
         difficulty: Int,
         successRate: Float,
         avgTime: Double
-    ): Int = runBlocking {
+    ): Int {
 
-        try {
+        return try {
 
             val prompt = """
 You control game difficulty.
@@ -110,7 +117,11 @@ Average response time: $avgTime ms
 Return ONLY a number between 1 and 10.
             """.trimIndent()
 
-            val response = llmClient!!.generate(prompt)
+            val response = withContext(Dispatchers.IO) {
+                withTimeoutOrNull(1200) {
+                    llmClient!!.generate(prompt)
+                }
+            } ?: return heuristicAdjustment(difficulty, successRate, avgTime)
 
             response.trim()
                 .toIntOrNull()

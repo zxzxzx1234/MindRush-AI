@@ -43,44 +43,35 @@ class GameManager {
 
     private val maxHistorySize = 8
 
-    fun startGame() {
+    suspend fun startGame() {
         resetSessionStats()
         startNewRound()
     }
 
     private fun resetSessionStats() {
         difficultyAI.reset()
-
         score = 0
         roundsCompleted = 0
         currentDifficulty = 1
         currentInputIndex = 0
-
         successHistory.clear()
         responseTimes.clear()
-
         _currentSequence.clear()
-
         gameState = GameState.START
     }
 
-    private fun startNewRound() {
+    private suspend fun startNewRound() {
         gameState = GameState.PREPARING_ROUND
-
         generateSequence()
-
         currentInputIndex = 0
         gameState = GameState.SHOWING_SEQUENCE
     }
 
-    private fun generateSequence() {
+    private suspend fun generateSequence() {
         val length = currentDifficulty
 
         val generatedSequence = try {
-            aiManager.generateSequence(
-                length,
-                currentDifficulty
-            )
+            aiManager.generateSequence(length, currentDifficulty)
         } catch (e: Exception) {
             fallbackSequence(length)
         }
@@ -95,12 +86,11 @@ class GameManager {
 
     fun startInputPhase() {
         if (gameState != GameState.SHOWING_SEQUENCE) return
-
         currentInputIndex = 0
         gameState = GameState.WAITING_INPUT
     }
 
-    fun addPlayerInput(
+    suspend fun addPlayerInput(
         value: Int,
         responseTime: Long
     ): Boolean {
@@ -138,54 +128,43 @@ class GameManager {
         return true
     }
 
-    private fun onRoundSuccess() {
+    private suspend fun onRoundSuccess() {
         registerRoundResult(true)
-
         score++
         roundsCompleted++
-
         gameState = GameState.ROUND_COMPLETE
-
         updateDifficulty()
-
         startNewRound()
     }
 
-    private fun onRoundFailure(
+    private suspend fun onRoundFailure(
         responseTime: Long
     ) {
-
         registerInputTime(responseTime)
         registerRoundResult(false)
-
         updateDifficulty()
-
         gameState = GameState.GAME_OVER
     }
 
     private fun registerRoundResult(
         success: Boolean
     ) {
-
         if (successHistory.size >= maxHistorySize) {
             successHistory.removeAt(0)
         }
-
         successHistory.add(success)
     }
 
     private fun registerInputTime(
         responseTime: Long
     ) {
-
         if (responseTimes.size >= maxHistorySize) {
             responseTimes.removeAt(0)
         }
-
         responseTimes.add(responseTime)
     }
 
-    private fun updateDifficulty() {
+    private suspend fun updateDifficulty() {
 
         if (successHistory.isEmpty() ||
             responseTimes.isEmpty()

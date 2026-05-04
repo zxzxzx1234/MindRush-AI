@@ -3,25 +3,9 @@ package com.example.mindrushai
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -76,14 +60,13 @@ fun GameScreen(gameManager: GameManager) {
 
     LaunchedEffect(animationTrigger) {
 
-        if (gameManager.gameState !=
-            GameManager.GameState.SHOWING_SEQUENCE
-        ) {
+        if (gameManager.gameState != GameManager.GameState.SHOWING_SEQUENCE) {
             return@LaunchedEffect
         }
 
         inputEnabled = false
         highlightedIndex = null
+        pressedIndex = null
 
         statusText = "Get Ready..."
         delay(900)
@@ -93,7 +76,6 @@ fun GameScreen(gameManager: GameManager) {
 
         val speed = sequenceSpeed()
         val pause = speed / 3
-
         val sequence = gameManager.currentSequence
 
         for (i in sequence.indices) {
@@ -169,14 +151,16 @@ fun GameScreen(gameManager: GameManager) {
 
         Button(
             onClick = {
-                gameManager.startGame()
-                score = 0
-                combo = 0
-                gameOver = false
-                highlightedIndex = null
-                pressedIndex = null
-                statusText = "Starting..."
-                animationTrigger++
+                scope.launch {
+                    gameManager.startGame()
+                    score = 0
+                    combo = 0
+                    gameOver = false
+                    highlightedIndex = null
+                    pressedIndex = null
+                    statusText = "Starting..."
+                    animationTrigger++
+                }
             }
         ) {
             Text("Start Game")
@@ -198,9 +182,7 @@ fun GameScreen(gameManager: GameManager) {
                         Button(
                             onClick = {
 
-                                if (!inputEnabled || gameOver) {
-                                    return@Button
-                                }
+                                if (!inputEnabled || gameOver) return@Button
 
                                 pressedIndex = index
 
@@ -210,35 +192,34 @@ fun GameScreen(gameManager: GameManager) {
                                 }
 
                                 val responseTime =
-                                    System.currentTimeMillis() -
-                                            inputStartTime
+                                    System.currentTimeMillis() - inputStartTime
 
-                                val result =
-                                    gameManager.addPlayerInput(
-                                        index,
-                                        responseTime
-                                    )
+                                scope.launch {
 
-                                score = gameManager.score
+                                    val result =
+                                        gameManager.addPlayerInput(
+                                            index,
+                                            responseTime
+                                        )
 
-                                if (!result) {
-                                    statusText = "Wrong Sequence!"
-                                    gameOver = true
-                                    combo = 0
-                                    inputEnabled = false
-                                } else if (
-                                    gameManager.gameState ==
-                                    GameManager.GameState.SHOWING_SEQUENCE
-                                ) {
-                                    combo++
+                                    score = gameManager.score
 
-                                    scope.launch {
+                                    if (!result) {
+                                        statusText = "Wrong Sequence!"
+                                        gameOver = true
+                                        combo = 0
+                                        inputEnabled = false
+                                    } else if (
+                                        gameManager.gameState ==
+                                        GameManager.GameState.SHOWING_SEQUENCE
+                                    ) {
+                                        combo++
                                         startNextRound()
                                     }
-                                }
 
-                                inputStartTime =
-                                    System.currentTimeMillis()
+                                    inputStartTime =
+                                        System.currentTimeMillis()
+                                }
                             },
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = if (active) {
@@ -250,8 +231,7 @@ fun GameScreen(gameManager: GameManager) {
                             modifier = Modifier
                                 .padding(10.dp)
                                 .size(
-                                    if (active) 118.dp
-                                    else 100.dp
+                                    if (active) 118.dp else 100.dp
                                 )
                         ) {}
                     }
@@ -276,15 +256,16 @@ fun GameScreen(gameManager: GameManager) {
 
             Button(
                 onClick = {
-                    gameManager.resetGame()
-
-                    score = 0
-                    combo = 0
-                    gameOver = false
-                    inputEnabled = false
-                    highlightedIndex = null
-                    pressedIndex = null
-                    statusText = "Press Start"
+                    scope.launch {
+                        gameManager.resetGame()
+                        score = 0
+                        combo = 0
+                        gameOver = false
+                        inputEnabled = false
+                        highlightedIndex = null
+                        pressedIndex = null
+                        statusText = "Press Start"
+                    }
                 }
             ) {
                 Text("Restart")
