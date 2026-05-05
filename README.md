@@ -1,5 +1,22 @@
 # MindRush AI -- Adaptive Memory Challenge Game
 
+## Quick links (MDS rubric checklist)
+
+| Rubric item | Where to find it |
+|---|---|
+| User stories (≥10) | [`docs/user_stories.md`](docs/user_stories.md) |
+| Backlog | [`docs/backlog.md`](docs/backlog.md) |
+| Component architecture diagram | [`docs/diagrams/architecture.md`](docs/diagrams/architecture.md) |
+| UML class diagram | [`docs/diagrams/class-diagram.md`](docs/diagrams/class-diagram.md) |
+| Gameplay & AI workflow | [`docs/diagrams/gameplay-workflow.md`](docs/diagrams/gameplay-workflow.md) |
+| Testing & AI evals strategy | [`docs/TESTING.md`](docs/TESTING.md) |
+| Known bugs & resolutions | [`docs/BUGS.md`](docs/BUGS.md) |
+| AI tools usage report | [`docs/AI_USAGE.md`](docs/AI_USAGE.md) |
+| Contributing guide | [`CONTRIBUTING.md`](CONTRIBUTING.md) |
+| CI/CD pipelines | [`.github/workflows/`](.github/workflows/) |
+| Issue templates | [`.github/ISSUE_TEMPLATE/`](.github/ISSUE_TEMPLATE/) |
+| PR template | [`.github/pull_request_template.md`](.github/pull_request_template.md) |
+
 ## Project Description
 
 **MindRush AI** is an Android-based memory game designed to challenge
@@ -297,5 +314,23 @@ sequences.**
 
 -   Android Studio
 -   Kotlin
+-   Jetpack Compose
 -   Git / GitHub
--   AI-assisted development tools
+-   GitHub Actions (CI/CD)
+-   LM Studio / Ollama / OpenAI (LLM backends)
+-   AI-assisted development tools (see [`docs/AI_USAGE.md`](docs/AI_USAGE.md))
+
+## Build & test
+
+```bash
+# Build debug APK
+./gradlew assembleDebug
+
+# Run unit tests
+./gradlew testDebugUnitTest
+
+# Run lint
+./gradlew lintDebug
+```
+
+CI runs all of the above on every push and pull request to `main`. See [`.github/workflows/`](.github/workflows/).
