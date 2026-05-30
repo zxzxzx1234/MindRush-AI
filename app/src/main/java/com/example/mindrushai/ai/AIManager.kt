@@ -1,155 +1,62 @@
 package com.example.mindrushai.ai
 
 import com.example.mindrushai.ai.llm.LLMClient
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 
-class AIManager(
-    private val llmClient: LLMClient? = null
-) {
+/**
+ * AIManager
+ *
+ * Single entry point for all AI functionality consumed by GameManager.
+ * Orchestrates the three non-deterministic AI agents, all sharing one
+ * [LLMClient] instance to avoid redundant HTTP connections.
+ *
+ * Agents:
+ *   1. [SequenceGeneratorAI] — generates phonetically distinct words per round
+ *   2. [WordValidatorAI]     — checks whether player input is a real English word
+ *   3. [HintGeneratorAI]     — produces contextual memory hints after failure
+ *
+ * [DifficultyAdjusterAI] is deterministic and lives directly in GameManager.
+ */
+class AIManager(llmClient: LLMClient? = null) {
 
-    private val generator = SequenceGeneratorAI()
+    private val sequenceGenerator = SequenceGeneratorAI(llmClient)
+    private val wordValidator     = WordValidatorAI(llmClient)
+    private val hintGenerator     = HintGeneratorAI(llmClient)
 
-    suspend fun generateSequence(length: Int, difficulty: Int): List<Int> {
+    // ── Agent delegation ──────────────────────────────────────────────────────
 
-        if (llmClient == null) {
-            return generator.generateSequence(length, difficulty)
-        }
+    /**
+     * Generates [length] words optimised for memorability at [difficulty].
+     * Called once per round — always a fresh LLM call, no caching.
+     */
+    suspend fun generateSequence(length: Int, difficulty: Int): List<String> =
+        sequenceGenerator.generateSequence(length, difficulty)
 
-        return try {
+    /**
+     * Returns whether [word] is a valid English word.
+     * Uses session cache + offline dictionary before calling the LLM,
+     * so frequently-typed correct words cost zero latency after the first check.
+     */
+    suspend fun validateWord(word: String): WordValidatorAI.ValidationResult =
+        wordValidator.validate(word)
 
-            val prompt = """
-Generate a sequence for a memory game.
+    /**
+     * Generates a contextual hint for [word] after the player failed to recall it.
+     *
+     * @param word          The word that should have been typed.
+     * @param sequence      The full round sequence (for positional context).
+     * @param wordIndex     Index of [word] within [sequence].
+     * @param attemptNumber Consecutive failures on this word — controls explicitness.
+     */
+    suspend fun generateHint(
+        word: String,
+        sequence: List<String> = emptyList(),
+        wordIndex: Int = 0,
+        attemptNumber: Int = 1
+    ): String = hintGenerator.generateHint(word, sequence, wordIndex, attemptNumber)
 
-Rules:
-- Length: $length
-- Difficulty: $difficulty
-- Values must be integers between 0 and 3
-- Avoid repeating the same number too often
-- Make it challenging but fair
-
-Return ONLY numbers like: 0,1,2,3
-            """.trimIndent()
-
-            val response = withContext(Dispatchers.IO) {
-                withTimeoutOrNull(1500) {
-                    llmClient.generate(prompt)
-                }
-            } ?: return generator.generateSequence(length, difficulty)
-
-            val parsed = parseSequence(response, length)
-
-            generator.refineSequence(parsed, difficulty)
-
-        } catch (e: Exception) {
-
-            generator.generateSequence(length, difficulty)
-        }
-    }
-
-    suspend fun adjustDifficulty(
-        currentDifficulty: Int,
-        successRate: Float,
-        avgTime: Double
-    ): Int {
-
-        return if (llmClient != null) {
-            tryLLMAdjustment(currentDifficulty, successRate, avgTime)
-        } else {
-            heuristicAdjustment(currentDifficulty, successRate, avgTime)
-        }
-    }
-
-    suspend fun explainDecision(
-        difficulty: Int,
-        successRate: Float
-    ): String {
-
-        return if (llmClient != null) {
-
-            val prompt = """
-Player success rate: $successRate
-New difficulty: $difficulty
-
-Explain briefly in ONE short sentence.
-            """.trimIndent()
-
-            withContext(Dispatchers.IO) {
-                withTimeoutOrNull(1200) {
-                    llmClient.generate(prompt)
-                }
-            } ?: "Adjusted based on performance."
-
-        } else {
-            "Difficulty adjusted based on performance."
-        }
-    }
-
-    private fun heuristicAdjustment(
-        difficulty: Int,
-        successRate: Float,
-        avgTime: Double
-    ): Int {
-
-        return when {
-            successRate > 0.85 && avgTime < 1200 -> difficulty + 1
-            successRate < 0.4 -> difficulty - 1
-            else -> difficulty
-        }.coerceIn(1, 10)
-    }
-
-    private suspend fun tryLLMAdjustment(
-        difficulty: Int,
-        successRate: Float,
-        avgTime: Double
-    ): Int {
-
-        return try {
-
-            val prompt = """
-You control game difficulty.
-
-Current difficulty: $difficulty
-Success rate: $successRate
-Average response time: $avgTime ms
-
-Return ONLY a number between 1 and 10.
-            """.trimIndent()
-
-            val response = withContext(Dispatchers.IO) {
-                withTimeoutOrNull(1200) {
-                    llmClient!!.generate(prompt)
-                }
-            } ?: return heuristicAdjustment(difficulty, successRate, avgTime)
-
-            response.trim()
-                .toIntOrNull()
-                ?.coerceIn(1, 10)
-                ?: heuristicAdjustment(difficulty, successRate, avgTime)
-
-        } catch (e: Exception) {
-
-            heuristicAdjustment(difficulty, successRate, avgTime)
-        }
-    }
-
-    private fun parseSequence(
-        response: String,
-        expectedLength: Int
-    ): List<Int> {
-
-        val numbers = response
-            .replace("[", "")
-            .replace("]", "")
-            .split(",", " ")
-            .mapNotNull { it.trim().toIntOrNull() }
-            .filter { it in 0..3 }
-
-        return if (numbers.size >= expectedLength) {
-            numbers.take(expectedLength)
-        } else {
-            generator.generateSequence(expectedLength, 1)
-        }
-    }
+    /**
+     * Clears the word validator's session cache.
+     * Must be called at the start of each new game.
+     */
+    fun clearValidatorCache() = wordValidator.clearCache()
 }
