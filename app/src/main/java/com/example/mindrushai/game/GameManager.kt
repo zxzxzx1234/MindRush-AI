@@ -10,24 +10,20 @@ import com.example.mindrushai.ai.llm.LMStudioClient
  *
  * Coordinates game state, round lifecycle, and AI interactions.
  *
- * ── Memory game loop ─────────────────────────────────────────────────────────
+ * Memory game loop:
+ *   1. AI generates N words  (N = roundsCompleted + 2, grows every round)
+ *   2. Words shown one at a time (speed scales with difficulty)
+ *   3. Words hidden — player types them all from memory, in order
+ *   4. One wrong word → game over + AI hint
+ *   5. Non-English word → soft warning, round continues
  *
- *   Each round:
- *     1. AI generates N words  (N = roundsCompleted + 2, grows every round)
- *     2. Words shown one at a time for a timed display (speed scales with difficulty)
- *     3. Words hidden — player types them all from memory, in order
- *     4. One wrong word → game over + AI-generated hint
- *     5. Non-English word → soft warning, round continues (no penalty)
+ * Progression axes:
+ *   • Sequence length = roundsCompleted + 2  (guaranteed +1 per success)
+ *   • Word difficulty = DifficultyAdjusterAI  (word profile + display speed)
  *
- *   Two independent progression axes:
- *     • Sequence length  = roundsCompleted + 2  (guaranteed +1 every success)
- *     • Word difficulty  = DifficultyAdjusterAI  (controls word profile + speed)
- *
- * ── State machine ────────────────────────────────────────────────────────────
- *
- *   START → PREPARING_ROUND → SHOWING_SEQUENCE → WAITING_INPUT
- *                                                  ├─ ROUND_COMPLETE → PREPARING_ROUND
- *                                                  └─ GAME_OVER
+ * Statistics tracked this session:
+ *   score, roundsCompleted, bestScore, currentStreak, bestStreak,
+ *   wordsCorrect, wordsAttempted, avgResponseTimeMs
  */
 class GameManager {
 
@@ -35,66 +31,77 @@ class GameManager {
     private val aiManager    = AIManager(llmClient)
     private val difficultyAI = DifficultyAdjusterAI()
 
-    // ── State ─────────────────────────────────────────────────────────────────
+    // ── Game state ────────────────────────────────────────────────────────────
 
     enum class GameState {
-        START,
-        PREPARING_ROUND,
-        SHOWING_SEQUENCE,
-        WAITING_INPUT,
-        ROUND_COMPLETE,
-        GAME_OVER
+        START, PREPARING_ROUND, SHOWING_SEQUENCE, WAITING_INPUT, ROUND_COMPLETE, GAME_OVER
     }
 
     var gameState: GameState = GameState.START
         private set
 
     private val _currentSequence = mutableListOf<String>()
-
-    /** Immutable snapshot of the current round's word sequence. */
     val currentSequence: List<String> get() = _currentSequence.toList()
 
+    // ── Session statistics ────────────────────────────────────────────────────
+
     var score: Int = 0
+        private set
+
+    var bestScore: Int = 0
         private set
 
     var roundsCompleted: Int = 0
         private set
 
-    /** Current word-profile difficulty, driven by [DifficultyAdjusterAI]. */
-    val difficulty: Int get() = difficultyAI.difficulty
+    /** Consecutive rounds completed without a mistake. */
+    var currentStreak: Int = 0
+        private set
 
-    /** Total words in the current sequence (= roundsCompleted + 2). */
+    /** Highest streak achieved this session. */
+    var bestStreak: Int = 0
+        private set
+
+    /** Total words correctly typed this session. */
+    var wordsCorrect: Int = 0
+        private set
+
+    /** Total word submissions this session (correct + wrong, excludes invalid). */
+    var wordsAttempted: Int = 0
+        private set
+
+    /** Session accuracy as a float 0..1 */
+    val accuracy: Float
+        get() = if (wordsAttempted == 0) 0f else wordsCorrect.toFloat() / wordsAttempted
+
+    /** Average per-word response time across the session in ms. */
+    val avgResponseTimeMs: Long
+        get() = if (allResponseTimes.isEmpty()) 0L else allResponseTimes.average().toLong()
+
+    val difficulty: Int get() = difficultyAI.difficulty
     val currentSequenceLength: Int get() = _currentSequence.size
 
-    private var inputIndex: Int    = 0
-    private var wrongAttempts: Int = 0
-
-    /** Last hint from [HintGeneratorAI]. Shown on the Game Over screen. */
     var lastHint: String = ""
         private set
 
-    /** Reason a word was rejected by [WordValidatorAI]. Shown as inline feedback. */
     var lastValidationReason: String = ""
         private set
 
-    // Per-word response times for the current round (for difficulty calculation)
-    private val currentRoundTimes = mutableListOf<Long>()
+    // Internal state
+    private var inputIndex: Int    = 0
+    private var wrongAttempts: Int = 0
 
-    // Bounded performance history
-    private val successHistory = ArrayDeque<Boolean>(HISTORY_SIZE)
+    private val currentRoundTimes  = mutableListOf<Long>()
+    private val allResponseTimes   = mutableListOf<Long>()  // all-session times for avg
+    private val successHistory     = ArrayDeque<Boolean>(HISTORY_SIZE)
 
     // ── Public API ────────────────────────────────────────────────────────────
 
-    /** Resets everything and begins the first round. */
     suspend fun startGame() {
         reset()
         beginNextRound()
     }
 
-    /**
-     * Called by the UI once the word animation finishes.
-     * Transitions SHOWING_SEQUENCE → WAITING_INPUT.
-     */
     fun startInputPhase() {
         if (gameState != GameState.SHOWING_SEQUENCE) return
         inputIndex    = 0
@@ -105,23 +112,8 @@ class GameManager {
         gameState = GameState.WAITING_INPUT
     }
 
-    /**
-     * Processes a single word typed by the player.
-     *
-     * Steps:
-     *   1. Guard: reject if state ≠ WAITING_INPUT.
-     *   2. WordValidatorAI: confirm the word exists in English.
-     *      Non-English → INVALID_WORD (round continues, no penalty).
-     *   3. Sequence match: compare against expected word.
-     *      Wrong → HintGeneratorAI → GAME_OVER.
-     *   4. Advance. Sequence complete → ROUND_COMPLETE → next round.
-     *
-     * @param inputWord  Player's submission (trimmed + lowercased internally).
-     * @param responseMs Ms since the player started typing this word.
-     */
     suspend fun addPlayerInput(inputWord: String, responseMs: Long): InputResult {
         if (gameState != GameState.WAITING_INPUT) return InputResult.ERROR
-
         if (_currentSequence.isEmpty() || inputIndex >= _currentSequence.size) {
             gameState = GameState.GAME_OVER
             return InputResult.ERROR
@@ -129,23 +121,26 @@ class GameManager {
 
         val word = inputWord.trim().lowercase()
 
-        // ── Step 2: word existence check ──────────────────────────────────────
+        // Word existence check (WordValidatorAI)
         if (word.length > 1) {
-            val validation = aiManager.validateWord(word)
-            if (!validation.isValid) {
-                lastValidationReason = validation.reason
-                AILogger.log("WORD_REJECTED", word, validation.reason)
+            val v = aiManager.validateWord(word)
+            if (!v.isValid) {
+                lastValidationReason = v.reason
+                AILogger.log("WORD_REJECTED", word, v.reason)
                 return InputResult.INVALID_WORD
             }
         }
 
         val expected = _currentSequence[inputIndex]
+        wordsAttempted++
 
-        // ── Step 3: sequence match ────────────────────────────────────────────
+        // Sequence match
         if (word != expected) {
             wrongAttempts++
             currentRoundTimes.add(responseMs)
-            recordResult(success = false)
+            allResponseTimes.add(responseMs)
+            recordResult(false)
+            currentStreak = 0
             updateDifficulty()
 
             lastHint = aiManager.generateHint(
@@ -159,8 +154,10 @@ class GameManager {
             return InputResult.WRONG_WORD
         }
 
-        // ── Step 4: correct word ──────────────────────────────────────────────
+        // Correct word
+        wordsCorrect++
         currentRoundTimes.add(responseMs)
+        allResponseTimes.add(responseMs)
         inputIndex++
         wrongAttempts        = 0
         lastHint             = ""
@@ -174,7 +171,6 @@ class GameManager {
         }
     }
 
-    /** Resets all session data without starting a new round. */
     fun resetGame() = reset()
 
     // ── Round lifecycle ───────────────────────────────────────────────────────
@@ -187,19 +183,18 @@ class GameManager {
         lastValidationReason = ""
         currentRoundTimes.clear()
 
-        // Sequence grows by 1 every completed round — always starts at 2
         val length = roundsCompleted + 2
 
         AILogger.log(
             "ROUND_START",
-            "round=${roundsCompleted + 1} seqLen=$length difficulty=$difficulty",
+            "round=${roundsCompleted + 1} len=$length d=$difficulty streak=$currentStreak",
             ""
         )
 
         val words = try {
             aiManager.generateSequence(length, difficulty)
         } catch (e: Exception) {
-            AILogger.log("SEQUENCE_EMERGENCY_FALLBACK", e.message ?: "?", "")
+            AILogger.log("SEQUENCE_EMERGENCY", e.message ?: "?", "")
             emergencySequence(length)
         }
 
@@ -209,9 +204,12 @@ class GameManager {
     }
 
     private suspend fun onRoundSuccess() {
-        recordResult(success = true)
+        recordResult(true)
         score++
         roundsCompleted++
+        currentStreak++
+        if (currentStreak > bestStreak) bestStreak = currentStreak
+        if (score > bestScore) bestScore = score
         gameState = GameState.ROUND_COMPLETE
         updateDifficulty()
         beginNextRound()
@@ -220,12 +218,9 @@ class GameManager {
     // ── Difficulty ────────────────────────────────────────────────────────────
 
     private fun updateDifficulty() {
-        val avgTime = if (currentRoundTimes.isEmpty()) 3000L
+        val avg = if (currentRoundTimes.isEmpty()) 3000L
         else currentRoundTimes.average().toLong()
-        difficultyAI.update(
-            success        = successHistory.lastOrNull() ?: false,
-            responseTimeMs = avgTime
-        )
+        difficultyAI.update(successHistory.lastOrNull() ?: false, avg)
     }
 
     private fun recordResult(success: Boolean) {
@@ -240,35 +235,31 @@ class GameManager {
         aiManager.clearValidatorCache()
         score           = 0
         roundsCompleted = 0
+        currentStreak   = 0
+        bestStreak      = 0
+        wordsCorrect    = 0
+        wordsAttempted  = 0
         inputIndex      = 0
         wrongAttempts   = 0
         lastHint        = ""
         lastValidationReason = ""
         successHistory.clear()
         currentRoundTimes.clear()
+        allResponseTimes.clear()
         _currentSequence.clear()
         gameState = GameState.START
     }
 
-    // ── Emergency fallback ────────────────────────────────────────────────────
-
-    private fun emergencySequence(length: Int): List<String> =
+    private fun emergencySequence(length: Int) =
         listOf("cat","dog","sun","map","key","box","hat","cup",
             "ant","jar","log","web","gem","ice","owl","pod")
             .shuffled().take(length)
 
-    // ── Result enum ───────────────────────────────────────────────────────────
-
     enum class InputResult {
-        /** Correct word; more words remain. */
-        CORRECT,
-        /** Correct word; sequence complete — round over. */
-        ROUND_COMPLETE,
-        /** Real English word but wrong — game over. */
-        WRONG_WORD,
-        /** Not a real English word — soft warning, round continues. */
-        INVALID_WORD,
-        /** Called from an invalid game state. */
+        CORRECT,        // correct word, more remain
+        ROUND_COMPLETE, // correct word, sequence done
+        WRONG_WORD,     // real English but wrong — game over
+        INVALID_WORD,   // not real English — soft warning
         ERROR
     }
 
