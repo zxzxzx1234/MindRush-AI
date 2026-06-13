@@ -13,17 +13,12 @@ import java.util.concurrent.TimeUnit
 /**
  * LLM backend targeting a locally-running LM Studio instance.
  *
- * The Android emulator reaches the host machine via the special alias 10.0.2.2.
- * LM Studio must expose its OpenAI-compatible endpoint on port 1234:
- *   LM Studio → Local Server tab → Start Server
+ * REQUIRED in AndroidManifest.xml:
+ *   <uses-permission android:name="android.permission.INTERNET" />
+ *   android:usesCleartextTraffic="true"   ← inside <application>
  *
- * Timeout rationale:
- *   connect  2 s  — fast on loopback; failure means LM Studio is not running
- *   read    10 s  — small CPU models can take 5–8 s for hint/validation prompts
- *   write    3 s  — prompt payloads are small
- *
- * This client never throws — all exceptions are caught and "" is returned
- * so upstream agents can activate their fallback logic transparently.
+ * Emulator → host via 10.0.2.2:1234
+ * Physical device → PC's LAN IP (e.g. 192.168.1.x:1234)
  */
 class LMStudioClient(
     private val baseUrl    : String = "http://10.0.2.2:1234",
@@ -32,9 +27,9 @@ class LMStudioClient(
 ) : LLMClient {
 
     private val httpClient = OkHttpClient.Builder()
-        .connectTimeout(2,  TimeUnit.SECONDS)
-        .readTimeout(10,    TimeUnit.SECONDS)
-        .writeTimeout(3,    TimeUnit.SECONDS)
+        .connectTimeout(3,  TimeUnit.SECONDS)
+        .readTimeout(20,    TimeUnit.SECONDS)   // generous — slow CPU models need time
+        .writeTimeout(5,    TimeUnit.SECONDS)
         .build()
 
     override suspend fun generate(prompt: String): String = withContext(Dispatchers.IO) {
@@ -42,7 +37,7 @@ class LMStudioClient(
             val payload = JSONObject().apply {
                 put("model",       modelId)
                 put("temperature", temperature)
-                put("max_tokens",  150)
+                put("max_tokens",  200)
                 put("messages", JSONArray().apply {
                     put(JSONObject().apply {
                         put("role",    "user")
@@ -58,7 +53,10 @@ class LMStudioClient(
                 .build()
 
             httpClient.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) return@withContext ""
+                if (!response.isSuccessful) {
+                    android.util.Log.e("MindRushAI", "LMStudio HTTP error: ${response.code}")
+                    return@withContext ""
+                }
                 val body = response.body?.string() ?: return@withContext ""
                 JSONObject(body)
                     .getJSONArray("choices")
@@ -67,8 +65,9 @@ class LMStudioClient(
                     .getString("content")
                     .trim()
             }
-        } catch (_: Exception) {
-            ""   // safe fallback — agents handle empty string gracefully
+        } catch (e: Exception) {
+            android.util.Log.e("MindRushAI", "LMStudio exception: ${e.message}")
+            ""
         }
     }
 }
