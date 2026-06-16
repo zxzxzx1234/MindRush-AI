@@ -1,29 +1,27 @@
-package com.example.mindrushai.ai.llm
+package com.example.mindrushai.ai
+
+import com.example.mindrushai.ai.llm.LLMClient
 
 /**
- * Test double for [LLMClient]. Returns scripted responses without touching the network,
- * so unit tests stay deterministic and run in milliseconds.
- *
- * Use [responder] to drive behavior per prompt:
- *  - Return a string → that string is the model output.
- *  - Throw → simulate a network/parse error.
- *  - Use the constructor [delayMs] to simulate slow responses (will hit the AIManager timeout).
+ * Test double for [LLMClient] that returns a fixed response.
+ * Tracks how many times [generate] was called for cache-hit verification.
  */
-class FakeLLMClient(
-    private val delayMs: Long = 0,
-    private val responder: (String) -> String
-) : LLMClient {
-
+class FakeLLMClient(private val response: String) : LLMClient {
     var callCount: Int = 0
         private set
-    val prompts: MutableList<String> = mutableListOf()
 
     override suspend fun generate(prompt: String): String {
         callCount++
-        prompts.add(prompt)
-        if (delayMs > 0) {
-            kotlinx.coroutines.delay(delayMs)
-        }
-        return responder(prompt)
+        return response
+    }
+}
+
+/**
+ * Test double for [LLMClient] that always throws an exception.
+ * Used to verify fallback behaviour on LLM failure.
+ */
+class ThrowingLLMClient : LLMClient {
+    override suspend fun generate(prompt: String): String {
+        throw RuntimeException("Simulated LLM network failure")
     }
 }

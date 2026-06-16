@@ -1,128 +1,158 @@
 package com.example.mindrushai.ai
 
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertTrue
+import kotlinx.coroutines.runBlocking
+import org.junit.Assert.*
 import org.junit.Test
 
 /**
  * Unit tests for [SequenceGeneratorAI].
  *
- * Coverage:
- *  - generateSequence respects requested length
- *  - All values fall in the valid token range [0, 3]
- *  - refineSequence removes consecutive duplicates (BUG-003 regression)
- *  - generateNext returns a valid token for every difficulty bucket
- *  - Empty / zero-length inputs are handled gracefully
- *  - Diversity check: high-difficulty sequences are not pathologically repetitive
+ * LLM-dependent paths are tested with a [FakeLLMClient] that returns
+ * controlled responses, allowing deterministic verification of:
+ *   - correct word count returned
+ *   - fallback activation on timeout/empty response
+ *   - parser robustness against messy LLM output
+ *   - difficulty-appropriate pool selection
  */
 class SequenceGeneratorAITest {
 
-    private val gen = SequenceGeneratorAI()
-
-    // -------- Length / range --------
+    // ── No-client (fallback only) ─────────────────────────────────────────────
 
     @Test
-    fun `generateSequence with length 0 returns empty list`() {
-        val out = gen.generateSequence(length = 0, difficulty = 1)
-        assertTrue("expected empty list, got $out", out.isEmpty())
+    fun `generateSequence with no client returns correct length`() = runBlocking {
+        val gen = SequenceGeneratorAI(llmClient = null)
+        val result = gen.generateSequence(3, 1)
+        assertEquals(3, result.size)
     }
 
     @Test
-    fun `generateSequence with negative length returns empty list`() {
-        val out = gen.generateSequence(length = -3, difficulty = 5)
-        assertTrue(out.isEmpty())
+    fun `generateSequence with no client returns non-empty strings`() = runBlocking {
+        val gen = SequenceGeneratorAI(llmClient = null)
+        val result = gen.generateSequence(4, 1)
+        assertTrue(result.all { it.isNotBlank() })
     }
 
     @Test
-    fun `generateSequence returns exactly the requested length`() {
-        for (len in 1..12) {
-            val out = gen.generateSequence(length = len, difficulty = 5)
-            assertEquals("length mismatch for len=$len", len, out.size)
-        }
+    fun `generateSequence length zero returns empty list`() = runBlocking {
+        val gen = SequenceGeneratorAI(llmClient = null)
+        val result = gen.generateSequence(0, 1)
+        assertTrue(result.isEmpty())
     }
 
     @Test
-    fun `every value is in 0 to 3`() {
-        for (difficulty in 1..10) {
-            val out = gen.generateSequence(length = 20, difficulty = difficulty)
-            out.forEach { v ->
-                assertTrue(
-                    "invalid token $v at difficulty=$difficulty in $out",
-                    v in 0..3
-                )
-            }
-        }
+    fun `generateSequence returns no duplicates`() = runBlocking {
+        val gen = SequenceGeneratorAI(llmClient = null)
+        val result = gen.generateSequence(5, 1)
+        assertEquals(result.size, result.distinct().size)
     }
 
-    // -------- BUG-003 regression: no consecutive duplicates after refine --------
+    // ── Difficulty pool selection ─────────────────────────────────────────────
 
     @Test
-    fun `bug003 refineSequence removes consecutive duplicates`() {
-        val raw = listOf(0, 0, 1, 1, 1, 2, 3, 3)
-        val refined = gen.refineSequence(raw, difficulty = 5)
-
-        assertEquals(raw.size, refined.size)
-        for (i in 1 until refined.size) {
+    fun `difficulty 1-3 returns short words from easy pool`() = runBlocking {
+        val gen = SequenceGeneratorAI(llmClient = null)
+        for (d in 1..3) {
+            val result = gen.generateSequence(3, d)
             assertTrue(
-                "consecutive duplicate at index $i in $refined",
-                refined[i] != refined[i - 1]
+                "Expected short words at difficulty $d, got: $result",
+                result.all { it.length in 2..4 }
             )
         }
-        refined.forEach { assertTrue(it in 0..3) }
     }
 
     @Test
-    fun `refineSequence on empty input returns empty list`() {
-        val out = gen.refineSequence(emptyList(), difficulty = 3)
-        assertTrue(out.isEmpty())
-    }
-
-    @Test
-    fun `refineSequence on single element preserves it`() {
-        val out = gen.refineSequence(listOf(2), difficulty = 1)
-        assertEquals(listOf(2), out)
-    }
-
-    // -------- generateNext smoke tests across difficulty buckets --------
-
-    @Test
-    fun `generateNext returns valid token for empty sequence at any difficulty`() {
-        for (difficulty in 1..10) {
-            val v = gen.generateNext(emptyList(), difficulty)
-            assertTrue("got $v for difficulty=$difficulty", v in 0..3)
+    fun `difficulty 4-6 returns medium words`() = runBlocking {
+        val gen = SequenceGeneratorAI(llmClient = null)
+        for (d in 4..6) {
+            val result = gen.generateSequence(3, d)
+            assertTrue(
+                "Expected medium words at difficulty $d, got: $result",
+                result.all { it.length >= 5 }
+            )
         }
     }
 
     @Test
-    fun `generateNext returns valid token for non-empty sequence`() {
-        val seed = listOf(0, 1, 2, 3, 0, 1)
-        for (difficulty in 1..10) {
-            val v = gen.generateNext(seed, difficulty)
-            assertNotNull(v)
-            assertTrue("got $v for difficulty=$difficulty", v in 0..3)
+    fun `difficulty 7-10 returns long words`() = runBlocking {
+        val gen = SequenceGeneratorAI(llmClient = null)
+        for (d in 7..10) {
+            val result = gen.generateSequence(3, d)
+            assertTrue(
+                "Expected long words at difficulty $d, got: $result",
+                result.all { it.length >= 7 }
+            )
         }
     }
 
-    // -------- Diversity / quality heuristic --------
+    // ── LLM client — clean response ───────────────────────────────────────────
 
     @Test
-    fun `high difficulty long sequence covers more than one token`() {
-        // Statistical smoke check: with length=20, the chance of producing a
-        // single-token sequence by accident is negligible. If we ever observe it,
-        // something has gone wrong with the generator.
-        val out = gen.generateSequence(length = 20, difficulty = 8)
-        val unique = out.toSet().size
-        assertTrue(
-            "expected diverse tokens at high difficulty, got $out (unique=$unique)",
-            unique >= 2
-        )
+    fun `LLM clean response is parsed correctly`() = runBlocking {
+        val fake = FakeLLMClient("cat,dog,sun")
+        val gen = SequenceGeneratorAI(llmClient = fake)
+        val result = gen.generateSequence(3, 1)
+        assertEquals(listOf("cat", "dog", "sun"), result)
     }
 
     @Test
-    fun `refined sequence preserves length`() {
-        val raw = listOf(1, 1, 1, 1, 1, 1, 1, 1)
-        val refined = gen.refineSequence(raw, difficulty = 7)
-        assertEquals(raw.size, refined.size)
+    fun `LLM response with spaces is trimmed`() = runBlocking {
+        val fake = FakeLLMClient("  cat , dog , sun  ")
+        val gen = SequenceGeneratorAI(llmClient = fake)
+        val result = gen.generateSequence(3, 1)
+        assertEquals(listOf("cat", "dog", "sun"), result)
+    }
+
+    @Test
+    fun `LLM response is lowercased`() = runBlocking {
+        val fake = FakeLLMClient("Cat,DOG,Sun")
+        val gen = SequenceGeneratorAI(llmClient = fake)
+        val result = gen.generateSequence(3, 1)
+        assertEquals(listOf("cat", "dog", "sun"), result)
+    }
+
+    // ── LLM client — messy response ───────────────────────────────────────────
+
+    @Test
+    fun `LLM response with numbering is parsed`() = runBlocking {
+        val fake = FakeLLMClient("1. cat\n2. dog\n3. sun")
+        val gen = SequenceGeneratorAI(llmClient = fake)
+        val result = gen.generateSequence(3, 1)
+        assertEquals(3, result.size)
+        assertTrue(result.containsAll(listOf("cat", "dog", "sun")))
+    }
+
+    @Test
+    fun `LLM response with brackets is parsed`() = runBlocking {
+        val fake = FakeLLMClient("[cat, dog, sun]")
+        val gen = SequenceGeneratorAI(llmClient = fake)
+        val result = gen.generateSequence(3, 1)
+        assertTrue(result.containsAll(listOf("cat", "dog", "sun")))
+    }
+
+    // ── LLM client — fallback activation ─────────────────────────────────────
+
+    @Test
+    fun `empty LLM response activates fallback`() = runBlocking {
+        val fake = FakeLLMClient("")
+        val gen = SequenceGeneratorAI(llmClient = fake)
+        val result = gen.generateSequence(3, 1)
+        assertEquals(3, result.size)
+        assertTrue(result.all { it.isNotBlank() })
+    }
+
+    @Test
+    fun `LLM response shorter than expected is supplemented by fallback`() = runBlocking {
+        val fake = FakeLLMClient("cat,dog")   // only 2 words for request of 4
+        val gen = SequenceGeneratorAI(llmClient = fake)
+        val result = gen.generateSequence(4, 1)
+        assertEquals(4, result.size)
+    }
+
+    @Test
+    fun `exception from LLM client activates fallback`() = runBlocking {
+        val fake = ThrowingLLMClient()
+        val gen = SequenceGeneratorAI(llmClient = fake)
+        val result = gen.generateSequence(3, 1)
+        assertEquals(3, result.size)
     }
 }

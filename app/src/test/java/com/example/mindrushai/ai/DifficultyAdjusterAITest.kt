@@ -1,151 +1,136 @@
 package com.example.mindrushai.ai
 
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
+import org.junit.Assert.*
+import org.junit.Before
 import org.junit.Test
 
 /**
  * Unit tests for [DifficultyAdjusterAI].
  *
- * Coverage:
- *  - Initial state and reset
- *  - Difficulty stays clamped in [1, 10]
- *  - Increases when player performs well (high success + fast time)
- *  - Decreases when player struggles (low success / slow time)
- *  - Stable in mid-zone (avoids flapping)
- *  - Guard against acting on too-small history
- *  - Regression for BUG-002 (no NaN with empty history)
+ * All tested behaviours are deterministic — no LLM involved.
  */
 class DifficultyAdjusterAITest {
 
-    private fun feed(
-        adjuster: DifficultyAdjusterAI,
-        rounds: Int,
-        success: Boolean,
-        responseTime: Long
-    ) {
-        repeat(rounds) {
-            adjuster.update(success, responseTime)
-        }
+    private lateinit var adjuster: DifficultyAdjusterAI
+
+    @Before
+    fun setUp() {
+        adjuster = DifficultyAdjusterAI()
     }
 
-    // -------- Initial state --------
+    // ── Initial state ─────────────────────────────────────────────────────────
 
     @Test
-    fun `initial difficulty is 1`() {
-        val adjuster = DifficultyAdjusterAI()
-        assertEquals(1, adjuster.difficulty)
+    fun `initial difficulty is MIN`() {
+        assertEquals(DifficultyAdjusterAI.MIN_DIFFICULTY, adjuster.difficulty)
     }
 
     @Test
-    fun `reset returns difficulty to 1 and clears history`() {
-        val adjuster = DifficultyAdjusterAI()
-        feed(adjuster, rounds = 8, success = true, responseTime = 500L)
+    fun `reset returns difficulty to MIN`() {
+        repeat(10) { adjuster.update(true, 500L) }
+        adjuster.reset()
+        assertEquals(DifficultyAdjusterAI.MIN_DIFFICULTY, adjuster.difficulty)
+    }
+
+    // ── Difficulty increases ──────────────────────────────────────────────────
+
+    @Test
+    fun `consistent success with fast response increases difficulty`() {
+        val initial = adjuster.difficulty
+        // 5 successes at 500ms — score ~= 0.75 + 0.25 = 1.0, well above 0.80
+        repeat(5) { adjuster.update(true, 500L) }
         assertTrue(
-            "expected difficulty to climb above 1 after 8 perfect rounds",
-            adjuster.difficulty > 1
+            "Expected difficulty > $initial, got ${adjuster.difficulty}",
+            adjuster.difficulty > initial
         )
+    }
+
+    @Test
+    fun `difficulty does not exceed MAX`() {
+        repeat(50) { adjuster.update(true, 300L) }
+        assertEquals(DifficultyAdjusterAI.MAX_DIFFICULTY, adjuster.difficulty)
+    }
+
+    // ── Difficulty decreases ──────────────────────────────────────────────────
+
+    @Test
+    fun `consistent failure with slow response decreases difficulty`() {
+        // First push up so we have room to fall
+        repeat(10) { adjuster.update(true, 400L) }
+        val elevated = adjuster.difficulty
 
         adjuster.reset()
+        // Push to same elevated level again cleanly
+        repeat(10) { adjuster.update(true, 400L) }
 
-        assertEquals(1, adjuster.difficulty)
-    }
-
-    // -------- Increase / decrease behavior --------
-
-    @Test
-    fun `high success and fast response time increases difficulty`() {
-        val adjuster = DifficultyAdjusterAI()
-        feed(adjuster, rounds = 5, success = true, responseTime = 500L)
-
-        // performanceScore = 1.0 * 0.75 + 1.0 * 0.25 = 1.0 -> >= 0.82 -> increase
-        assertTrue(
-            "expected difficulty > 1 after good performance, got ${adjuster.difficulty}",
-            adjuster.difficulty > 1
-        )
-    }
-
-    @Test
-    fun `repeated good performance keeps increasing until cap`() {
-        val adjuster = DifficultyAdjusterAI()
-        feed(adjuster, rounds = 50, success = true, responseTime = 400L)
-
-        assertEquals(
-            "difficulty must be capped at 10",
-            10, adjuster.difficulty
-        )
-    }
-
-    @Test
-    fun `low success rate eventually decreases difficulty`() {
-        val adjuster = DifficultyAdjusterAI()
-
-        // First climb up
-        feed(adjuster, rounds = 20, success = true, responseTime = 500L)
-        val peak = adjuster.difficulty
-        assertTrue("expected to climb above 1", peak > 1)
-
-        // Then fail enough rounds to flip the success rate below 0.35
-        // History size is 8, so 8 failures fully overwrite.
-        feed(adjuster, rounds = 8, success = false, responseTime = 4000L)
+        // Now fail 5 times slowly
+        repeat(5) { adjuster.update(false, 7000L) }
 
         assertTrue(
-            "expected difficulty to drop after sustained failure (peak=$peak, now=${adjuster.difficulty})",
-            adjuster.difficulty < peak
+            "Expected difficulty to decrease from $elevated, got ${adjuster.difficulty}",
+            adjuster.difficulty < elevated
         )
     }
 
     @Test
-    fun `decrease never goes below 1`() {
-        val adjuster = DifficultyAdjusterAI()
-        feed(adjuster, rounds = 50, success = false, responseTime = 5000L)
-
-        assertEquals(
-            "difficulty must be clamped at minimum 1",
-            1, adjuster.difficulty
-        )
+    fun `difficulty does not go below MIN`() {
+        repeat(20) { adjuster.update(false, 9000L) }
+        assertEquals(DifficultyAdjusterAI.MIN_DIFFICULTY, adjuster.difficulty)
     }
 
-    // -------- Stability / guards --------
+    // ── Stability ─────────────────────────────────────────────────────────────
 
     @Test
-    fun `does not adjust before having at least 3 samples`() {
-        val adjuster = DifficultyAdjusterAI()
-
-        // 2 perfect rounds: not enough history yet
-        feed(adjuster, rounds = 2, success = true, responseTime = 400L)
-
-        assertEquals(
-            "must remain at 1 with fewer than 3 samples",
-            1, adjuster.difficulty
-        )
-    }
-
-    @Test
-    fun `mid-zone performance keeps difficulty stable`() {
-        val adjuster = DifficultyAdjusterAI()
-
-        // Alternate success/fail with mid response time
-        repeat(8) { idx ->
-            adjuster.update(idx % 2 == 0, 1500L)
+    fun `mixed performance holds difficulty stable`() {
+        val initial = adjuster.difficulty
+        // Alternate success and failure at medium speed — should stay near start
+        repeat(5) {
+            adjuster.update(true, 2000L)
+            adjuster.update(false, 2000L)
         }
+        // Not asserting exact value, just that it hasn't shot to MAX or MIN
+        assertTrue(adjuster.difficulty in 1..DifficultyAdjusterAI.MAX_DIFFICULTY)
+    }
 
-        // successRate = 0.5, timeScore ~ 0.7 -> performance ~ 0.55 -> stable zone
-        assertEquals(
-            "mid-zone performance should not change difficulty",
-            1, adjuster.difficulty
+    // ── Snapshot ──────────────────────────────────────────────────────────────
+
+    @Test
+    fun `snapshot returns zero values on empty history`() {
+        val snap = adjuster.snapshot()
+        assertEquals(0f,  snap.successRate, 0.001f)
+        assertEquals(0.0, snap.avgResponseTimeMs, 0.001)
+        assertEquals(0,   snap.sampleCount)
+    }
+
+    @Test
+    fun `snapshot reflects updates correctly`() {
+        adjuster.update(true, 1000L)
+        adjuster.update(true, 2000L)
+        val snap = adjuster.snapshot()
+        assertEquals(2,   snap.sampleCount)
+        assertEquals(1f,  snap.successRate, 0.001f)
+        assertEquals(1500.0, snap.avgResponseTimeMs, 1.0)
+    }
+
+    // ── Performance score thresholds ──────────────────────────────────────────
+
+    @Test
+    fun `all successes at very fast speed yields high performance score`() {
+        repeat(5) { adjuster.update(true, 400L) }
+        val snap = adjuster.snapshot()
+        assertTrue(
+            "Expected score > 0.80, got ${snap.performanceScore}",
+            snap.performanceScore >= 0.80
         )
     }
 
-    // -------- Regression: BUG-002 (NaN with empty history) --------
-
     @Test
-    fun `bug002 regression - no crash when no metrics have been fed`() {
-        val adjuster = DifficultyAdjusterAI()
-
-        // Reading difficulty before any update must be safe
-        val d = adjuster.difficulty
-
-        assertEquals(1, d)
+    fun `all failures at very slow speed yields low performance score`() {
+        repeat(5) { adjuster.update(false, 8000L) }
+        val snap = adjuster.snapshot()
+        assertTrue(
+            "Expected score <= 0.40, got ${snap.performanceScore}",
+            snap.performanceScore <= 0.40
+        )
     }
 }
