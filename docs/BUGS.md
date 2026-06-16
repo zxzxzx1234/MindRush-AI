@@ -1,58 +1,70 @@
-# Known Bugs & Resolutions
-
-This file lists the bugs that have been identified during development of MindRush AI, their resolution status, and the PR / commit that fixes them. It is a lightweight changelog focused on defects (the rubric item B.5).
-
-For new bugs, please open a GitHub issue using the bug report template (`.github/ISSUE_TEMPLATE/bug_report.md`).
+# Known Bugs & Resolutions — MindRush AI
 
 ---
 
-## Open
+## Fixed bugs
 
-| ID | Title | Severity | Notes |
-|---|---|---|---|
-| BUG-005 | Best score not reset when changing user (single-device, multi-player) | Low | Edge case, low priority. |
+### BUG-001 — AI agents silently falling back to 3-letter words
 
----
+**Symptom**: Game always generated very short words regardless of difficulty. LLM agents appeared to not be running.
 
-## Resolved
+**Root cause**: `android:usesCleartextTraffic="true"` was missing from `AndroidManifest.xml`. Android blocks plain HTTP traffic by default from API 28+. LM Studio serves on `http://10.0.2.2:1234` — plain HTTP. All requests were silently dropped by the OS. `LMStudioClient` caught the exception and returned `""`, which correctly triggered the fallback pools. The fallback worked so well that there was no visible crash or error.
 
-### BUG-001 -- Game crashes when LLM endpoint is unreachable
-- **Severity**: High
-- **Reported in**: internal testing, mid-development
-- **Symptom**: Toggling Ollama off mid-game caused an unhandled `IOException`, crashing `MainActivity`.
-- **Root cause**: `OllamaClient.complete()` did not catch network errors; the exception propagated to the agent and from there to the UI thread.
-- **Fix**: Added `isAvailable()` check + try/catch in each `LLMClient` implementation; agents now fall back to the local heuristic when the client reports unavailable.
-- **Status**: ✅ Resolved
-- **Tracking**: see PR for compliance branch (`Insiderfyr/mds-compliance`).
+**Fix**: Added `android:usesCleartextTraffic="true"` inside the `<application>` tag in `AndroidManifest.xml`.
 
-### BUG-002 -- DifficultyAdjusterAI returns NaN when no rounds played yet
-- **Severity**: Medium
-- **Symptom**: First round had undefined difficulty because success rate was computed as `correct / total` with `total == 0`.
-- **Root cause**: Division by zero in metrics aggregation.
-- **Fix**: Added a guard returning `DifficultyLevel.EASY` when no metrics are available yet.
-- **Status**: ✅ Resolved
-
-### BUG-003 -- SequenceGeneratorAI sometimes outputs duplicate consecutive tokens that the UI cannot render distinctly
-- **Severity**: Medium
-- **Symptom**: Two consecutive identical buttons in the displayed sequence look like a single, longer flash.
-- **Root cause**: The LLM-generated sequence had no constraint against repeats; the UI renders each step with the same animation duration so consecutive duplicates collapse visually.
-- **Fix**: Added a small inter-step pause and a validator that re-rolls the second token if it equals the first.
-- **Status**: ✅ Resolved
-
-### BUG-004 -- Local LLM returns malformed JSON, breaking parsing
-- **Severity**: High
-- **Symptom**: `SequenceGeneratorAI` threw `JsonSyntaxException` on small Ollama models.
-- **Root cause**: Models like `phi3:mini` occasionally prefix output with prose ("Sure, here is the sequence: ...") and break strict JSON parsing.
-- **Fix**: Implemented tolerant parsing: extract the first `[...]` substring, fall back to heuristic if extraction fails.
-- **Status**: ✅ Resolved
+**Lesson**: A well-implemented fallback can mask infrastructure failures completely. Always verify the primary path is active (check Logcat for `[SEQUENCE_LLM]` vs `[SEQUENCE_TIMEOUT]`).
 
 ---
 
-## How a bug is processed
+### BUG-002 — `GameStats` computed property in data class constructor
 
-1. Open a GitHub issue using the bug report template.
-2. Reproduce locally; confirm severity.
-3. Create a `fix/<issue-number>-<slug>` branch.
-4. Submit a PR that references the issue (`Closes #N`).
-5. After review and CI green, merge into `main`.
-6. Add an entry above to the **Resolved** table.
+**Symptom**: Compilation error — `Expecting comma or ')'`, `Primary constructor of data class must only have property parameters`.
+
+**Root cause**: `sessionAccuracy` was defined with `get() = ...` inside the data class primary constructor, which Kotlin does not allow. Computed properties in data classes must be defined in the class body, not the constructor.
+
+**Fix**: Changed `sessionAccuracy` to a plain `val` with a default value of `0f`. The value is now computed before construction in `GameViewModel.buildStats()`.
+
+---
+
+### BUG-003 — `TestableGameManager : GameManager()` fails to compile
+
+**Symptom**: `This type is final, so it cannot be extended` in `GameManagerTest.kt`.
+
+**Root cause**: Kotlin makes all classes `final` by default. `GameManager` was never declared `open`, so subclassing was impossible.
+
+**Fix**: Removed `TestableGameManager` entirely. `GameManagerTest` now instantiates `GameManager` directly and relies on the LLM timeout (LM Studio not running during tests) to activate the fallback pools, which is the correct behaviour to test anyway.
+
+---
+
+### BUG-004 — LLM timeout too short for CPU-bound models
+
+**Symptom**: `[SEQUENCE_TIMEOUT_FALLBACK]` appearing in Logcat even with LM Studio running. Agents consistently using fallback pools.
+
+**Root cause**: Initial timeouts (3–5 seconds) were insufficient. Small local models (3B–7B parameters) running on CPU can take 8–12 seconds to generate a short word list.
+
+**Fix**: Increased timeouts across all agents:
+- `SequenceGeneratorAI`: 6000ms → 15000ms
+- `WordValidatorAI`: 4000ms → 10000ms
+- `HintGeneratorAI`: 5000ms → 12000ms
+- `LMStudioClient` `readTimeout`: 10s → 20s
+
+---
+
+### BUG-005 — Sequence always length 1-2, difficulty not increasing
+
+**Symptom**: Game generated very short sequences that never got longer. Difficulty stayed at 1.
+
+**Root cause**: Sequence length was `difficulty + 1`. `DifficultyAdjusterAI` had a `MIN_SAMPLES = 3` guard that prevented any adjustment until 3 rounds had been played with data. Combined, this meant the game felt stuck.
+
+**Fix**:
+- Sequence length changed to `roundsCompleted + 2` — now grows independently of difficulty, guaranteed +1 every successful round
+- Removed `MIN_SAMPLES` gate from `DifficultyAdjusterAI` — now reacts after every round
+- History window reduced from 8 to 5 for faster reaction
+
+---
+
+## Known limitations (not bugs)
+
+- **Physical device**: `10.0.2.2` only works on the Android Emulator. On a physical device, replace with the PC's LAN IP address in `LMStudioClient.kt`.
+- **Model cold start**: First request after loading a model in LM Studio can take 20–30 seconds. Subsequent requests are faster. The game will use fallback pools for the first round if the model hasn't warmed up.
+- **`ScoreRepository` tests require Mockito**: The `ScoreRepositoryTest` mocks Android's `SharedPreferences`. Mockito must be added to `build.gradle.kts` test dependencies.

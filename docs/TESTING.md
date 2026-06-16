@@ -1,100 +1,129 @@
-# Testing & AI Evaluation Strategy
-
-This document describes the testing approach for MindRush AI, including how we evaluate the two AI agents (which is required by the MDS rubric, item B.4: *automated tests, including evals for agents*).
+# Testing Strategy — MindRush AI
 
 ---
 
-## 1. Test layers
+## Overview
 
-| Layer | Framework | Where |
-|---|---|---|
-| Unit tests (deterministic logic) | JUnit 4 | `app/src/test/` |
-| Instrumented tests (Android-specific) | AndroidJUnit4, Espresso | `app/src/androidTest/` |
-| AI agent evals (probabilistic) | JUnit 4 + custom harness | `app/src/test/.../ai/eval/` |
+The project has **140 unit tests** across 8 test files, divided into two categories:
 
-CI runs all layers via `./gradlew testDebugUnitTest` and `./gradlew lintDebug` (see `.github/workflows/android-test.yml`).
+- **Unit tests** — verify individual classes in isolation, deterministic pass/fail
+- **AI evals** — verify agent quality with success-rate thresholds, mimicking how real LLM evaluation works
 
----
-
-## 2. Unit tests -- game logic
-
-Targets:
-
-- `GameManager`
-  - `startGame()` transitions state from `START` to `PLAYING`.
-  - `submitInput(correct)` advances index; `submitInput(wrong)` moves to `GAME_OVER`.
-  - Score increments only on a fully correct round.
-  - `restart()` resets state and score but keeps best score.
-  - Persistence: best score is read on init, written when beaten.
-
-These are deterministic, hermetic tests. No network, no LLM calls.
+All tests run without a device or emulator (JVM-only, no Android runtime required except `ScoreRepositoryTest` which mocks the Android context).
 
 ---
 
-## 3. Unit tests -- AI agent fallback heuristics
+## Test files
 
-The fallback heuristics inside `SequenceGeneratorAI` and `DifficultyAdjusterAI` are deterministic, so they are unit-testable directly:
+### `DifficultyAdjusterAITest` — 11 tests
 
-- `SequenceGeneratorAI.fallbackHeuristic(length)` returns a list of the requested length and only contains valid token IDs.
-- `DifficultyAdjusterAI.fallbackHeuristic(metrics)` returns:
-  - `EASY` when success rate < 0.4
-  - `HARD` when success rate > 0.85 and average response time is low
-  - `MEDIUM` otherwise
+Covers the deterministic difficulty engine:
+- Initial state is `MIN_DIFFICULTY`
+- `reset()` restores initial state
+- Consistent success + fast responses increases difficulty
+- Consistent failure + slow responses decreases difficulty
+- Difficulty is bounded to `[1..10]`
+- `snapshot()` returns accurate metrics
+- Performance score thresholds match expected `THRESHOLD_UP` / `THRESHOLD_DOWN` values
 
-These tests run on every CI build.
+### `SequenceGeneratorAITest` — 15 tests
+
+Covers fallback pools and LLM integration:
+- Correct length returned at all difficulties
+- No duplicates in output
+- Difficulty 1–3 returns short words, 4–6 medium, 7–10 long
+- `FakeLLMClient` used to inject controlled responses
+- Parser handles: clean CSV, spaces, uppercase, numbered lists, brackets, extra text
+
+### `AIManagerTest` — 17 tests
+
+Covers orchestration and delegation:
+- `generateSequence` returns correct length and non-empty strings
+- `validateWord` accepts offline-dict words, single letters; rejects gibberish
+- `generateHint` returns non-empty fallback; attempt 3 reveals first letter
+- `clearValidatorCache` allows re-validation after clear
+- Integration tests with `FakeLLMClient` for all three agents
+
+### `WordValidatorAITest` — 22 tests
+
+Covers all three validation tiers:
+- Tier 1 (instant): single letters, offline dict, trim/lowercase
+- Tier 2 (cache): `FakeLLMClient.callCount` confirms LLM called once, then cached
+- Tier 3 (LLM): YES/NO parsing, timeout → assumed valid, exception → assumed valid
+- All SequenceGeneratorAI fallback pool words are accepted offline
+
+### `HintGeneratorAITest` — 14 tests
+
+Covers fallback and LLM integration:
+- Attempt 1: generic hint for short/medium/long words
+- Attempt 2: reveals first letter and length
+- Attempt 3+: explicit hint with letter and count
+- LLM response: used directly, quotes stripped, first line taken
+- Empty LLM response / exception: falls back to local hint
+
+### `GameManagerTest` — 29 tests
+
+Covers the full game state machine:
+- Initial state `START`, score 0, empty sequence
+- `startGame()` → `SHOWING_SEQUENCE`, 2-word sequence
+- `startInputPhase()` transitions state correctly
+- Correct words: `CORRECT`, `ROUND_COMPLETE`, score/roundsCompleted increments
+- After round 1: second sequence has 3 words
+- Wrong real English word: `WRONG_WORD` + `GAME_OVER`
+- Gibberish: `INVALID_WORD`, state stays `WAITING_INPUT`
+- `resetGame()` clears all state
+
+### `ScoreRepositoryTest` — 17 tests
+
+Uses Mockito to mock `Context` and `SharedPreferences` (no Android runtime):
+- All initial values are 0
+- `saveSessionResult` updates bestScore only if higher
+- Accumulates rounds, games, words across multiple sessions
+- `lifetimeAccuracy` computed correctly
+- `clearAll` resets everything
+
+### `AIEvalHarnessTest` — 15 evals
+
+Quality thresholds instead of exact assertions:
+- Fallback pools: 100% correct length across all 10 difficulty levels
+- Parser: ≥ 80% success rate on 10 different messy LLM output formats
+- Offline dictionary: 100% acceptance of all fallback pool words
+- Cache: `callCount == 1` after 3 identical validation requests
+- YES/NO formats: ≥ 80% parsed correctly across format variations
+- Difficulty simulation: skilled player reaches difficulty ≥ 5 after 30 rounds
+- Struggling player simulation stays at `MIN_DIFFICULTY`
+- 50-round random simulation stays within `[1..10]`
 
 ---
 
-## 4. AI agent evals (probabilistic)
+## Running tests
 
-LLMs are non-deterministic, so we treat their evaluation as a *statistical contract* instead of pass/fail per call.
+```bash
+# All unit tests
+./gradlew testDebugUnitTest
 
-### 4.1 Evaluation harness
-
-For each agent we run a fixed set of inputs through the LLM-backed agent N times (default N=20) and aggregate metrics. The harness:
-
-1. Mocks the `LLMClient` with a recorded set of plausible outputs (some valid, some malformed) -- no real network needed in CI.
-2. For real-LLM runs (manual, not in CI), uses a local Ollama model.
-3. Reports pass-rate per criterion.
-
-### 4.2 Eval criteria -- SequenceGeneratorAI
-
-| Criterion | Target |
-|---|---|
-| Output is parseable as `List<Int>` | ≥ 95% |
-| Output length matches requested length | ≥ 90% |
-| All tokens are within valid range `[0, NUM_BUTTONS)` | ≥ 95% |
-| No more than one consecutive duplicate token | ≥ 80% (rest are filtered by the validator) |
-
-### 4.3 Eval criteria -- DifficultyAdjusterAI
-
-| Criterion | Target |
-|---|---|
-| Output is one of `{EASY, MEDIUM, HARD}` | 100% (with fallback) |
-| Monotonicity: higher success rate ⇒ same or harder difficulty (over the test set) | ≥ 85% |
-| Stability: same metrics ⇒ same difficulty across 5 calls | ≥ 80% |
-
-### 4.4 What "passing" means
-
-If the live (real-LLM) eval rate drops below the target, we *do not* fail CI -- we file an issue and consider:
-- prompt tuning,
-- model swap,
-- raising the fallback threshold so the heuristic kicks in more often.
-
-The CI eval (mocked LLM) is deterministic and is a hard pass/fail.
+# HTML report
+open app/build/reports/tests/testDebugUnitTest/index.html
+```
 
 ---
 
-## 5. Manual / instrumented tests
+## Test doubles
 
-- Smoke test: install debug APK, play 3 rounds, verify score increments and Game Over screen renders.
-- Backend swap: switch `AIManager` between `LMStudioClient`, `OllamaClient`, `OpenAIClient`, fallback. The game must remain playable in all four configurations.
+`FakeLLMClient` and `ThrowingLLMClient` live in `test/java/com/example/mindrushai/ai/FakeLLMClient.kt`:
+
+- `FakeLLMClient(response)` — returns a fixed string, tracks `callCount`
+- `ThrowingLLMClient` — always throws `RuntimeException`, used to verify fallback paths
 
 ---
 
-## 6. Roadmap (what is not yet automated)
+## Dependencies
 
-- [ ] Espresso UI tests for the three screens.
-- [ ] Property-based tests for `GameManager` round transitions.
-- [ ] Snapshot tests for AI prompts (so we notice when prompt drifts).
-- [ ] Recording a longer eval set (~200 inputs per agent) for nightly runs.
+Add to `app/build.gradle.kts`:
+
+```kotlin
+testImplementation("junit:junit:4.13.2")
+testImplementation("org.mockito.kotlin:mockito-kotlin:5.2.1")
+testImplementation("org.mockito:mockito-core:5.7.0")
+testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
+```
