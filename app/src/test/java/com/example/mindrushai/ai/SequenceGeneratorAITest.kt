@@ -51,13 +51,18 @@ class SequenceGeneratorAITest {
     @Test
     fun `difficulty 1-3 returns short words from easy pool`() = runBlocking {
         val gen = SequenceGeneratorAI(llmClient = null)
-        for (d in 1..3) {
+        // D1: 3-letter, D2: 4-letter
+        for (d in 1..2) {
             val result = gen.generateSequence(3, d)
             assertTrue(
-                "Expected short words at difficulty $d, got: $result",
-                result.all { it.length in 2..4 }
+                "Expected 3-4 letter words at difficulty $d, got: $result",
+                result.all { it.length in 3..4 }
             )
         }
+        // D3: 5-letter
+        val d3Result = gen.generateSequence(3, 3)
+        assertTrue("Expected 5-letter words at difficulty 3, got: $d3Result",
+            d3Result.all { it.length == 5 })
     }
 
     @Test

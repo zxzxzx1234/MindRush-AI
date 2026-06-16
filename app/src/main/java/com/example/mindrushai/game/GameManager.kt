@@ -25,10 +25,10 @@ import com.example.mindrushai.ai.llm.LMStudioClient
  *   score, roundsCompleted, bestScore, currentStreak, bestStreak,
  *   wordsCorrect, wordsAttempted, avgResponseTimeMs
  */
-class GameManager {
+class GameManager(
+    private val aiManager: AIManager = AIManager(LMStudioClient())
+) {
 
-    private val llmClient    = LMStudioClient()
-    private val aiManager    = AIManager(llmClient)
     private val difficultyAI = DifficultyAdjusterAI()
 
     // ── Game state ────────────────────────────────────────────────────────────

@@ -71,6 +71,7 @@ class WordValidatorAI(
             "paradigm","serendipity","tenacious","juxtapose","soliloquy","ephemeral",
             "clandestine","oscillate","ubiquitous","ineffable","sycophant","recondite",
             "palimpsest","perfidious","loquacious","equivocate","byzantine","inscrutable",
+            "sanguine","truculent","mellifluous","obfuscate","querulous","perihelion",
             // common short words
             "a","i","the","and","for","are","but","not","you","all","can","her","was",
             "one","our","out","day","get","has","him","his","how","its","may","new",

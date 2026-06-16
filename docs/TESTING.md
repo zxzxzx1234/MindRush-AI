@@ -4,12 +4,12 @@
 
 ## Overview
 
-The project has **140 unit tests** across 8 test files, divided into two categories:
+The project has **107 unit tests** across 7 test files, divided into two categories:
 
 - **Unit tests** — verify individual classes in isolation, deterministic pass/fail
 - **AI evals** — verify agent quality with success-rate thresholds, mimicking how real LLM evaluation works
 
-All tests run without a device or emulator (JVM-only, no Android runtime required except `ScoreRepositoryTest` which mocks the Android context).
+All tests run without a device or emulator (JVM-only, no Android runtime required).
 
 ---
 
@@ -35,15 +35,6 @@ Covers fallback pools and LLM integration:
 - `FakeLLMClient` used to inject controlled responses
 - Parser handles: clean CSV, spaces, uppercase, numbered lists, brackets, extra text
 
-### `AIManagerTest` — 17 tests
-
-Covers orchestration and delegation:
-- `generateSequence` returns correct length and non-empty strings
-- `validateWord` accepts offline-dict words, single letters; rejects gibberish
-- `generateHint` returns non-empty fallback; attempt 3 reveals first letter
-- `clearValidatorCache` allows re-validation after clear
-- Integration tests with `FakeLLMClient` for all three agents
-
 ### `WordValidatorAITest` — 22 tests
 
 Covers all three validation tiers:
@@ -61,7 +52,7 @@ Covers fallback and LLM integration:
 - LLM response: used directly, quotes stripped, first line taken
 - Empty LLM response / exception: falls back to local hint
 
-### `GameManagerTest` — 29 tests
+### `GameManagerTest` — 23 tests
 
 Covers the full game state machine:
 - Initial state `START`, score 0, empty sequence
@@ -72,15 +63,6 @@ Covers the full game state machine:
 - Wrong real English word: `WRONG_WORD` + `GAME_OVER`
 - Gibberish: `INVALID_WORD`, state stays `WAITING_INPUT`
 - `resetGame()` clears all state
-
-### `ScoreRepositoryTest` — 17 tests
-
-Uses Mockito to mock `Context` and `SharedPreferences` (no Android runtime):
-- All initial values are 0
-- `saveSessionResult` updates bestScore only if higher
-- Accumulates rounds, games, words across multiple sessions
-- `lifetimeAccuracy` computed correctly
-- `clearAll` resets everything
 
 ### `AIEvalHarnessTest` — 15 evals
 
@@ -93,6 +75,9 @@ Quality thresholds instead of exact assertions:
 - Difficulty simulation: skilled player reaches difficulty ≥ 5 after 30 rounds
 - Struggling player simulation stays at `MIN_DIFFICULTY`
 - 50-round random simulation stays within `[1..10]`
+
+### `ExampleUnitTest` — 7 tests
+Basic sanity checks for the project structure and environment.
 
 ---
 

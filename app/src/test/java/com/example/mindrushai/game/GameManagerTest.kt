@@ -1,5 +1,6 @@
 package com.example.mindrushai.game
 
+import com.example.mindrushai.ai.AIManager
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
 import org.junit.Before
@@ -8,17 +9,9 @@ import org.junit.Test
 /**
  * Unit tests for [GameManager].
  *
- * GameManager hardcodes its LMStudioClient internally. Since the emulator
- * is not running during unit tests, LLM calls time out and the fallback
- * pools in SequenceGeneratorAI are used — which is exactly the behaviour
- * we want to test (the game must work without a live LLM server).
- *
- * Tests focus on observable state machine behaviour:
- *   - Initial state
- *   - State transitions
- *   - Score and round counting
- *   - Input processing results
- *   - Reset correctness
+ * We inject an AIManager with no LLM client to ensure deterministic
+ * behaviour during unit tests — especially for word validation
+ * and sequence generation fallback paths.
  */
 class GameManagerTest {
 
@@ -26,7 +19,7 @@ class GameManagerTest {
 
     @Before
     fun setUp() {
-        manager = GameManager()
+        manager = GameManager(AIManager(null))
     }
 
     // ── Initial state ─────────────────────────────────────────────────────────

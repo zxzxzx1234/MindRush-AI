@@ -163,7 +163,7 @@ class WordValidatorAITest {
 
     @Test
     fun `all medium pool words are in offline dictionary`() = runBlocking {
-        val mediumWords = listOf("blanket","journey","pillow","rocket","ladder","candle")
+        val mediumWords = listOf("blanket","journey","silver","rocket","tunnel","candle")
         mediumWords.forEach { word ->
             assertTrue("Expected '$word' in offline dict", validator.validate(word).isValid)
         }

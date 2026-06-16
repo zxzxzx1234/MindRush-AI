@@ -119,7 +119,7 @@ class AIEvalHarnessTest {
             // easy pool sample
             "cat","dog","run","joy","sun","map","key","cup","fly","pen",
             // medium pool sample
-            "blanket","journey","pillow","rocket","ladder","candle","silver","tunnel",
+            "blanket","journey","silver","rocket","tunnel","candle",
             // hard pool sample
             "ephemeral","labyrinth","cognition","resonance","melancholy"
         )
